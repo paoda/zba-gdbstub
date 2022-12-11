@@ -6,6 +6,32 @@ const Socket = network.Socket;
 
 const port: u16 = 2424;
 
+const target: []const u8 =
+    \\<target version="1.0">
+    \\    <architecture>armv4t</architecture>
+    \\    <feature name="org.gnu.gdb.arm.core">
+    \\        <reg name="r0" bitsize="32" type="uint32"/>
+    \\        <reg name="r1" bitsize="32" type="uint32"/>
+    \\        <reg name="r2" bitsize="32" type="uint32"/>
+    \\        <reg name="r3" bitsize="32" type="uint32"/>
+    \\        <reg name="r4" bitsize="32" type="uint32"/>
+    \\        <reg name="r5" bitsize="32" type="uint32"/>
+    \\        <reg name="r6" bitsize="32" type="uint32"/>
+    \\        <reg name="r7" bitsize="32" type="uint32"/>
+    \\        <reg name="r8" bitsize="32" type="uint32"/>
+    \\        <reg name="r9" bitsize="32" type="uint32"/>
+    \\        <reg name="r10" bitsize="32" type="uint32"/>
+    \\        <reg name="r11" bitsize="32" type="uint32"/>
+    \\        <reg name="r12" bitsize="32" type="uint32"/>
+    \\        <reg name="sp" bitsize="32" type="data_ptr"/>
+    \\        <reg name="lr" bitsize="32"/>
+    \\        <reg name="pc" bitsize="32" type="code_ptr"/>
+    \\
+    \\        <reg name="cpsr" bitsize="32" regnum="25"/>
+    \\    </feature>
+    \\</target>
+;
+
 pub fn main() !void {
     const log = std.log.scoped(.Server);
 
@@ -48,35 +74,35 @@ fn gdbStubServer(allocator: Allocator, client: Socket) !void {
                 if (previous) |packet| allocator.free(packet);
                 previous = response;
             },
-            .recognize_ack => {
+            .recv_ack => {
                 if (previous) |packet| allocator.free(packet);
                 previous = null;
             },
-            .retry => {},
+            .recv_nack => {},
         }
     }
 }
 
 const Action = union(enum) {
     send: []const u8,
-    retry,
-    recognize_ack,
+    recv_nack,
+    recv_ack,
 };
 
 fn parse(allocator: Allocator, client: Socket, previous: ?[]const u8, input: []const u8) !Action {
     const log = std.log.scoped(.GdbStubParser);
 
     return switch (input[0]) {
-        '+' => .recognize_ack,
+        '+' => .recv_ack,
         '-' => blk: {
             if (previous) |packet| {
-                log.warn("Received negative ack, resending: \"{s}\"", .{packet});
+                log.warn("received nack, resending: \"{s}\"", .{packet});
                 _ = try client.send(packet);
             } else {
-                log.err("Server sent negative ack, but gdbstub doesn't recall sending anything", .{});
+                log.err("received nack, but we don't recall sending anything", .{});
             }
 
-            break :blk .retry;
+            break :blk .recv_nack;
         },
         '$' => blk: {
             // Packet
@@ -149,7 +175,7 @@ const Packet = struct {
                 const ret: Signal = .Trap;
 
                 // Deallocated by the caller
-                return .{ .alloc = try std.fmt.allocPrint(allocator, "S {x:0>2}", .{@enumToInt(ret)}) };
+                return .{ .alloc = try std.fmt.allocPrint(allocator, "T{x:0>2}thread:1;", .{@enumToInt(ret)}) };
             },
             'g', 'G' => @panic("TODO: Register Access"),
             'm', 'M' => @panic("TODO: Memory Access"),
@@ -177,13 +203,50 @@ const Packet = struct {
                 return .{ .static = "" };
             },
             'q' => {
-                if (substr(self.contents[1..], "Supported")) {
-                    const ret = try std.fmt.allocPrint(allocator, "PacketSize={x:}", .{Packet.size});
-                    // TODO: Should we support anything else?
+                if (self.contents[1] == 'C' and self.contents.len == 2) return .{ .static = "QC1" };
+                if (substr(self.contents[1..], "fThreadInfo")) return .{ .static = "m1" };
+                if (substr(self.contents[1..], "sThreadInfo")) return .{ .static = "l" };
+                if (substr(self.contents[1..], "Attached")) return .{ .static = "1" }; // Tell GDB we're attached to a process
 
+                if (substr(self.contents[1..], "Supported")) {
+                    const format = "PacketSize={x:};qXfer:features:read+;qXfer:memory-map:read+";
+                    // TODO: Anything else?
+
+                    const ret = try std.fmt.allocPrint(allocator, format, .{Packet.size});
                     return .{ .alloc = ret };
-                } else if (substr(self.contents[1..], "Attached")) {
-                    return .{ .static = "0" }; // We tell GDB that we've created a new process
+                }
+
+                if (substr(self.contents[1..], "Xfer:features:read")) {
+                    var tokens = std.mem.tokenize(u8, self.contents[1..], ":,");
+                    _ = tokens.next(); // qXfer
+                    _ = tokens.next(); // features
+                    _ = tokens.next(); // read
+                    const annex = tokens.next() orelse return .{ .static = "E00" };
+                    const offset_str = tokens.next() orelse return .{ .static = "E00" };
+                    const length_str = tokens.next() orelse return .{ .static = "E00" };
+
+                    if (std.mem.eql(u8, annex, "target.xml")) {
+                        log.info("Providing ARMv4T target description", .{});
+
+                        const offset = try std.fmt.parseInt(usize, offset_str, 16);
+                        const length = try std.fmt.parseInt(usize, length_str, 16);
+
+                        // + 2 to account for the "m " in the response
+                        // subtract offset so that the allocated buffer isn't
+                        // larger than it needs to be TODO: Test this?
+                        const len = @min(length, (target.len + 1) - offset);
+                        const ret = try allocator.alloc(u8, len);
+
+                        ret[0] = if (ret.len < length) 'l' else 'm';
+                        std.mem.copy(u8, ret[1..], target[offset..]);
+
+                        return .{ .alloc = ret };
+                    } else {
+                        log.err("Unexpected Annex: {s}", .{annex});
+                        return .{ .static = "E00" };
+                    }
+
+                    return .{ .static = "" };
                 }
 
                 log.warn("Unimplemented: {s}", .{self.contents});
