@@ -27,6 +27,7 @@ pub fn link(exe: *std.build.LibExeObjStep) void {
 
 pub fn build(b: *std.build.Builder) void {
     const target = b.standardTargetOptions(.{});
+    _ = target;
     const mode = b.standardReleaseOptions();
 
     // -- library --
@@ -42,18 +43,18 @@ pub fn build(b: *std.build.Builder) void {
     const test_step = b.step("lib-test", "Run Library Tests");
     test_step.dependOn(&lib_tests.step);
 
-    // -- Executable --
-    const exe = b.addExecutable("gdbserver", "src/main.zig");
-    link(exe);
+    // // -- Executable --
+    // const exe = b.addExecutable("gdbserver", "src/main.zig");
+    // link(exe);
 
-    exe.setTarget(target);
-    exe.setBuildMode(mode);
-    exe.install();
+    // exe.setTarget(target);
+    // exe.setBuildMode(mode);
+    // exe.install();
 
-    const run_cmd = exe.run();
-    run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| run_cmd.addArgs(args);
+    // const run_cmd = exe.run();
+    // run_cmd.step.dependOn(b.getInstallStep());
+    // if (b.args) |args| run_cmd.addArgs(args);
 
-    const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&run_cmd.step);
+    // const run_step = b.step("run", "Run the app");
+    // run_step.dependOn(&run_cmd.step);
 }

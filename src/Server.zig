@@ -4,6 +4,7 @@ const Packet = @import("Packet.zig");
 
 const Socket = network.Socket;
 const Allocator = std.mem.Allocator;
+const Emulator = @import("lib.zig").Emulator;
 
 const Self = @This();
 const log = std.log.scoped(.Server);
@@ -41,7 +42,9 @@ pkt_cache: ?[]const u8 = null,
 client: Socket,
 _socket: Socket,
 
-pub fn init() !Self {
+emu: Emulator,
+
+pub fn init(emulator: Emulator) !Self {
     try network.init();
 
     var socket = try Socket.create(.ipv4, .tcp);
@@ -53,7 +56,7 @@ pub fn init() !Self {
     const endpoint = try client.getLocalEndPoint();
     log.info("client connected from {}", .{endpoint});
 
-    return .{ ._socket = socket, .client = client };
+    return .{ .emu = emulator, ._socket = socket, .client = client };
 }
 
 pub fn deinit(self: *Self, allocator: Allocator) void {
@@ -81,12 +84,12 @@ pub fn run(self: *Self, allocator: Allocator) !void {
         const len = try self.client.receive(&buf);
         if (len == 0) break;
 
-        const action = try Self.parse(allocator, buf[0..len]);
+        const action = try self.parse(allocator, buf[0..len]);
         try self.send(allocator, action);
     }
 }
 
-fn parse(allocator: Allocator, input: []const u8) !Action {
+fn parse(self: *Self, allocator: Allocator, input: []const u8) !Action {
     return switch (input[0]) {
         '+' => .nothing,
         '-' => .retry,
@@ -95,7 +98,7 @@ fn parse(allocator: Allocator, input: []const u8) !Action {
             var packet = Packet.from(allocator, input) catch return .nack;
             defer packet.deinit(allocator);
 
-            var string = packet.parse(allocator) catch return .nack;
+            var string = packet.parse(allocator, self.emu) catch return .nack;
             defer string.deinit(allocator);
 
             const reply = string.inner();

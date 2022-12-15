@@ -2,6 +2,7 @@ const std = @import("std");
 
 const target = @import("Server.zig").target;
 const Allocator = std.mem.Allocator;
+const Emulator = @import("lib.zig").Emulator;
 
 const Self = @This();
 const log = std.log.scoped(.Packet);
@@ -44,7 +45,7 @@ const String = union(enum) {
     }
 };
 
-pub fn parse(self: *Self, allocator: Allocator) !String {
+pub fn parse(self: *Self, allocator: Allocator, emu: Emulator) !String {
     switch (self.contents[0]) {
         // Required
         '?' => {
@@ -55,8 +56,8 @@ pub fn parse(self: *Self, allocator: Allocator) !String {
         },
         'g' => {
             // TODO: Actually reference GBA Registers
-            const r = [_]u32{0xDEAD_BEEF} ** 0x10;
-            const cpsr: u32 = 0xCAFE_B0BA;
+            const r = emu.registers();
+            const cpsr = emu.cpsr();
 
             const char_len = 2;
             const reg_len = @sizeOf(u32) * char_len; // Every byte is represented by 2 characters
@@ -64,7 +65,7 @@ pub fn parse(self: *Self, allocator: Allocator) !String {
             const ret = try allocator.alloc(u8, r.len * reg_len + reg_len); // r0 -> r15 + CPSR
 
             {
-                var i: usize = 0;
+                var i: u32 = 0;
                 while (i < r.len + 1) : (i += 1) {
                     const reg: u32 = if (i < r.len) r[i] else cpsr;
 
@@ -88,14 +89,13 @@ pub fn parse(self: *Self, allocator: Allocator) !String {
 
             const addr = try std.fmt.parseInt(u32, addr_str, 16);
             const len = try std.fmt.parseInt(u32, length_str, 16);
-            _ = addr;
 
             const ret = try allocator.alloc(u8, len * 2);
 
             {
-                var i: usize = 0;
+                var i: u32 = 0;
                 while (i < len) : (i += 1) {
-                    const value: u8 = 0;
+                    const value: u8 = emu.read(addr + i);
 
                     _ = std.fmt.bufPrintIntToSlice(ret[i * 2 ..][0..2], value, 16, .lower, .{ .fill = '0', .width = 2 });
                 }

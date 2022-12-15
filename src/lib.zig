@@ -11,8 +11,8 @@ pub const Emulator = struct {
     writeFn: *const fn (*anyopaque, u32, u8) void,
 
     // FIXME: Expensive copy
-    registersFn: *const fn (*const anyopaque) [16]u32,
-    cpsrFn: *const fn (*const anyopaque) u32,
+    registersFn: *const fn (*anyopaque) [16]u32,
+    cpsrFn: *const fn (*anyopaque) u32,
 
     pub fn init(ptr: anytype) Self {
         const Ptr = @TypeOf(ptr);
@@ -27,25 +27,25 @@ pub const Emulator = struct {
             pub fn readImpl(pointer: *anyopaque, addr: u32) u8 {
                 const self = @ptrCast(Ptr, @alignCast(alignment, pointer));
 
-                return @call(.{ .modifier = .always_inline }, ptr_info.Pointer.child.read, .{ u8, self, addr });
+                return @call(.{ .modifier = .always_inline }, ptr_info.Pointer.child.read, .{ self, addr });
             }
 
             pub fn writeImpl(pointer: *anyopaque, addr: u32, value: u8) void {
                 const self = @ptrCast(Ptr, @alignCast(alignment, pointer));
 
-                return @call(.{ .modifier = .always_inline }, ptr_info.Pointer.child.read, .{ u8, self, addr, value });
+                return @call(.{ .modifier = .always_inline }, ptr_info.Pointer.child.write, .{ self, addr, value });
             }
 
-            pub fn registersImpl(pointer: *const anyopaque) [16]u32 {
+            pub fn registersImpl(pointer: *anyopaque) [16]u32 {
                 const self = @ptrCast(Ptr, @alignCast(alignment, pointer));
 
-                return self.r;
+                return @call(.{ .modifier = .always_inline }, ptr_info.Pointer.child.registers, .{self});
             }
 
-            pub fn cpsrImpl(pointer: *const anyopaque) u32 {
+            pub fn cpsrImpl(pointer: *anyopaque) u32 {
                 const self = @ptrCast(Ptr, @alignCast(alignment, pointer));
 
-                return self.cpsr.raw;
+                return @call(.{ .modifier = .always_inline }, ptr_info.Pointer.child.cpsr, .{self});
             }
         };
 
