@@ -1,9 +1,5 @@
 const std = @import("std");
-const network = @import("network");
-const Server = @import("Server.zig");
-
-const Allocator = std.mem.Allocator;
-const Socket = network.Socket;
+const Server = @import("gdbstub").Server;
 
 pub fn main() !void {
     const log = std.log.scoped(.Main);
