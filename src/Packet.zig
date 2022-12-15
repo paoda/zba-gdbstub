@@ -107,6 +107,10 @@ pub fn parse(self: *Self, allocator: Allocator, emu: Emulator) !String {
         's' => @panic("TODO: Step"),
 
         // Optional
+        'D' => {
+            log.info("Disconneccting...", .{});
+            return .{ .static = "OK" };
+        },
         'H' => {
             log.warn("{s}", .{self.contents});
 
