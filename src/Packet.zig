@@ -51,10 +51,8 @@ pub fn parse(self: *Self, allocator: Allocator, emu: Emulator) !String {
     switch (self.contents[0]) {
         // Required
         '?' => {
-            const ret: Signal = .Trap;
-
-            // Deallocated by the caller
-            return .{ .alloc = try std.fmt.allocPrint(allocator, "T{x:0>2}thread:1;", .{@enumToInt(ret)}) };
+            const ret = try std.fmt.allocPrint(allocator, "S{x:0>2}", .{@enumToInt(Signal.Int)});
+            return .{ .alloc = ret };
         },
         'g' => {
             const r = emu.registers();
@@ -66,12 +64,12 @@ pub fn parse(self: *Self, allocator: Allocator, emu: Emulator) !String {
             {
                 var i: u32 = 0;
                 while (i < r.len + 1) : (i += 1) {
-                    const reg: u32 = @byteSwap(if (i < r.len) r[i] else cpsr); // Seems like GDB expects this
+                    var reg: u32 = if (i < r.len) r[i] else cpsr;
+                    if (i == 15) reg -= if (cpsr >> 5 & 1 == 1) 4 else 8; // PC is ahead
 
-                    // bufPrintIntToSlice writes to the provided slice, which is all we want from this
-                    // consequentially, we ignore the slice it returns since it just references the slice
-                    // passed as an argument
-                    _ = std.fmt.bufPrintIntToSlice(ret[i * 8 ..][0..8], reg, 16, .lower, .{ .fill = '0', .width = 8 });
+                    // writes the formatted integer to the buffer, returns a slice to the buffer but we ignore that
+                    // GDB also expects the bytes to be in the opposite order for whatever reason
+                    _ = std.fmt.bufPrintIntToSlice(ret[i * 8 ..][0..8], @byteSwap(reg), 16, .lower, .{ .fill = '0', .width = 8 });
                 }
             }
 
@@ -79,9 +77,6 @@ pub fn parse(self: *Self, allocator: Allocator, emu: Emulator) !String {
         },
         'G' => @panic("TODO: Register Write"),
         'm' => {
-            // TODO: Actually reference GBA Memory
-            log.err("{s}", .{self.contents});
-
             var tokens = std.mem.tokenize(u8, self.contents[1..], ",");
             const addr_str = tokens.next() orelse return .{ .static = "E9999" }; // EUNKNOWN
             const length_str = tokens.next() orelse return .{ .static = "E9999" }; // EUNKNOWN
@@ -94,9 +89,8 @@ pub fn parse(self: *Self, allocator: Allocator, emu: Emulator) !String {
             {
                 var i: u32 = 0;
                 while (i < len) : (i += 1) {
-                    const value: u8 = emu.read(addr + i);
-
-                    _ = std.fmt.bufPrintIntToSlice(ret[i * 2 ..][0..2], value, 16, .lower, .{ .fill = '0', .width = 2 });
+                    // writes the formatted integer to the buffer, returns a slice to the buffer but we ignore that
+                    _ = std.fmt.bufPrintIntToSlice(ret[i * 2 ..][0..2], emu.read(addr + i), 16, .lower, .{ .fill = '0', .width = 2 });
                 }
             }
 
@@ -104,24 +98,34 @@ pub fn parse(self: *Self, allocator: Allocator, emu: Emulator) !String {
         },
         'M' => @panic("TODO: Memory Write"),
         'c' => @panic("TODO: Continue"),
-        's' => @panic("TODO: Step"),
+        's' => {
+            var tokens = std.mem.tokenize(u8, self.contents[1..], " ");
+            const addr = if (tokens.next()) |s| try std.fmt.parseInt(u32, s, 16) else null;
+
+            log.debug("s addr: {?X:0>8}", .{addr});
+
+            emu.step();
+
+            const ret = try std.fmt.allocPrint(allocator, "S{x:0>2}", .{@enumToInt(Signal.Trap)});
+            return .{ .alloc = ret };
+        },
 
         // Optional
+        // 'S' => {
+        //     var tokens = std.mem.tokenize(u8, self.contents[1..], " ");
+        //     const signal = if (tokens.next()) |s| try std.fmt.parseInt(u8, s, 16) else null;
+        //     log.debug("S signal: {?}", .{signal});
+
+        //     emu.step();
+
+        //     const ret = try std.fmt.allocPrint(allocator, "S{x:0>2}", .{@enumToInt(Signal.Trap)});
+        //     return .{ .alloc = ret };
+        // },
         'D' => {
             log.info("Disconneccting...", .{});
             return .{ .static = "OK" };
         },
-        'H' => {
-            log.warn("{s}", .{self.contents});
-
-            switch (self.contents[1]) {
-                'g', 'c' => return .{ .static = "OK" },
-                else => {
-                    log.warn("Unimplemented: {s}", .{self.contents});
-                    return .{ .static = "" };
-                },
-            }
-        },
+        'H' => return .{ .static = "" },
         'v' => {
             if (substr(self.contents[1..], "MustReplyEmpty")) {
                 return .{ .static = "" };
@@ -232,7 +236,7 @@ fn verify(input: []const u8, chksum: u8) bool {
 }
 
 const Signal = enum(u32) {
-    Hup, // Hangup
+    Hup = 1, // Hangup
     Int, // Interrupt
     Quit, // Quit
     Ill, // Illegal Instruction

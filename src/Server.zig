@@ -125,6 +125,7 @@ fn parse(self: *Self, allocator: Allocator, input: []const u8) !Action {
 
             break :blk .{ .send = response };
         },
+        '\x03' => .nothing,
         else => std.debug.panic("Unknown: {s}", .{input}),
     };
 }
