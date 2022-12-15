@@ -53,8 +53,57 @@ pub fn parse(self: *Self, allocator: Allocator) !String {
             // Deallocated by the caller
             return .{ .alloc = try std.fmt.allocPrint(allocator, "T{x:0>2}thread:1;", .{@enumToInt(ret)}) };
         },
-        'g', 'G' => @panic("TODO: Register Access"),
-        'm', 'M' => @panic("TODO: Memory Access"),
+        'g' => {
+            // TODO: Actually reference GBA Registers
+            const r = [_]u32{0xDEAD_BEEF} ** 0x10;
+            const cpsr: u32 = 0xCAFE_B0BA;
+
+            const char_len = 2;
+            const reg_len = @sizeOf(u32) * char_len; // Every byte is represented by 2 characters
+
+            const ret = try allocator.alloc(u8, r.len * reg_len + reg_len); // r0 -> r15 + CPSR
+
+            {
+                var i: usize = 0;
+                while (i < r.len + 1) : (i += 1) {
+                    const reg: u32 = if (i < r.len) r[i] else cpsr;
+
+                    // bufPrintIntToSlice writes to the provided slice, which is all we want from this
+                    // consequentially, we ignore the slice it returns since it just references the slice
+                    // passed as an argument
+                    _ = std.fmt.bufPrintIntToSlice(ret[i * 8 ..][0..8], reg, 16, .lower, .{ .fill = '0', .width = 8 });
+                }
+            }
+
+            return .{ .alloc = ret };
+        },
+        'G' => @panic("TODO: Register Write"),
+        'm' => {
+            // TODO: Actually reference GBA Memory
+            log.err("{s}", .{self.contents});
+
+            var tokens = std.mem.tokenize(u8, self.contents[1..], ",");
+            const addr_str = tokens.next() orelse return .{ .static = "E9999" }; // EUNKNOWN
+            const length_str = tokens.next() orelse return .{ .static = "E9999" }; // EUNKNOWN
+
+            const addr = try std.fmt.parseInt(u32, addr_str, 16);
+            const len = try std.fmt.parseInt(u32, length_str, 16);
+            _ = addr;
+
+            const ret = try allocator.alloc(u8, len * 2);
+
+            {
+                var i: usize = 0;
+                while (i < len) : (i += 1) {
+                    const value: u8 = 0;
+
+                    _ = std.fmt.bufPrintIntToSlice(ret[i * 2 ..][0..2], value, 16, .lower, .{ .fill = '0', .width = 2 });
+                }
+            }
+
+            return .{ .alloc = ret };
+        },
+        'M' => @panic("TODO: Memory Write"),
         'c' => @panic("TODO: Continue"),
         's' => @panic("TODO: Step"),
 
