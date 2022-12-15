@@ -57,19 +57,16 @@ pub fn parse(self: *Self, allocator: Allocator, emu: Emulator) !String {
             return .{ .alloc = try std.fmt.allocPrint(allocator, "T{x:0>2}thread:1;", .{@enumToInt(ret)}) };
         },
         'g' => {
-            // TODO: Actually reference GBA Registers
             const r = emu.registers();
             const cpsr = emu.cpsr();
 
-            const char_len = 2;
-            const reg_len = @sizeOf(u32) * char_len; // Every byte is represented by 2 characters
-
+            const reg_len = @sizeOf(u32) * 2; // Every byte is represented by 2 characters
             const ret = try allocator.alloc(u8, r.len * reg_len + reg_len); // r0 -> r15 + CPSR
 
             {
                 var i: u32 = 0;
                 while (i < r.len + 1) : (i += 1) {
-                    const reg: u32 = if (i < r.len) r[i] else cpsr;
+                    const reg: u32 = @byteSwap(if (i < r.len) r[i] else cpsr); // Seems like GDB expects this
 
                     // bufPrintIntToSlice writes to the provided slice, which is all we want from this
                     // consequentially, we ignore the slice it returns since it just references the slice
