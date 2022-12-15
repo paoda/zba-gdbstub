@@ -39,23 +39,18 @@ pub const target: []const u8 =
 // Game Pak SRAM isn't included
 // TODO: Can i be more specific here?
 pub const memory_map: []const u8 =
-    \\ <?xml version="1.0"?>
-    \\ <!DOCTYPE memory-map
-    \\     PUBLIC "+//IDN gnu.org//DTD GDB Memory Map V1.0//EN"
-    \\         "http://sourceware.org/gdb/gdb-memory-map.dtd">
-    \\
-    \\ <memory-map>
-    \\     <memory type="rom" start="0" length="4000">
-    \\     <memory type="ram" start="2000000" length="40000">
-    \\     <memory type="ram" start="3000000" length="8000">
-    \\     <memory type="ram" start="4000000" length="400">
-    \\     <memory type="ram" start="5000000" length="400">
-    \\     <memory type="ram" start="6000000" length="18000">
-    \\     <memory type="ram" start="7000000" length="400">
-    \\     <memory type="rom" start="8000000" length="20000000">
-    \\     <memory type="rom" start="A000000" length="20000000">
-    \\     <memory type="rom" start="C000000" length="20000000">
-    \\ </memory-map>;
+    \\ <memory-map version="1.0">
+    \\     <memory type="rom" start="0x00000000" length="0x00004000"/>
+    \\     <memory type="ram" start="0x02000000" length="0x00040000"/>
+    \\     <memory type="ram" start="0x03000000" length="0x00008000"/>
+    \\     <memory type="ram" start="0x04000000" length="0x00000400"/>
+    \\     <memory type="ram" start="0x05000000" length="0x00000400"/>
+    \\     <memory type="ram" start="0x06000000" length="0x00018000"/>
+    \\     <memory type="ram" start="0x07000000" length="0x00000400"/>
+    \\     <memory type="rom" start="0x08000000" length="0x02000000"/>
+    \\     <memory type="rom" start="0x0A000000" length="0x02000000"/>
+    \\     <memory type="rom" start="0x0C000000" length="0x02000000"/>
+    \\ </memory-map>
 ;
 
 // FIXME: Shouldn't this be a Packet Struct?

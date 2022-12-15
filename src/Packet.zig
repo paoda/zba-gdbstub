@@ -181,6 +181,8 @@ pub fn parse(self: *Self, allocator: Allocator, emu: Emulator) !String {
                 const offset_str = tokens.next() orelse return .{ .static = "E9999" };
                 const length_str = tokens.next() orelse return .{ .static = "E9999" };
 
+                log.info("Providing GBA memory map", .{});
+
                 const offset = try std.fmt.parseInt(usize, offset_str, 16);
                 const length = try std.fmt.parseInt(usize, length_str, 16);
 
