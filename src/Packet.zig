@@ -1,8 +1,10 @@
 const std = @import("std");
 
-const target = @import("Server.zig").target;
 const Allocator = std.mem.Allocator;
 const Emulator = @import("lib.zig").Emulator;
+
+const target = @import("Server.zig").target;
+const memory_map = @import("Server.zig").memory_map;
 
 const Self = @This();
 const log = std.log.scoped(.Packet);
@@ -143,7 +145,7 @@ pub fn parse(self: *Self, allocator: Allocator, emu: Emulator) !String {
 
             if (substr(self.contents[1..], "Xfer:features:read")) {
                 var tokens = std.mem.tokenize(u8, self.contents[1..], ":,");
-                _ = tokens.next(); // qXfer
+                _ = tokens.next(); // Xfer
                 _ = tokens.next(); // features
                 _ = tokens.next(); // read
                 const annex = tokens.next() orelse return .{ .static = "E00" };
@@ -172,6 +174,27 @@ pub fn parse(self: *Self, allocator: Allocator, emu: Emulator) !String {
                 }
 
                 return .{ .static = "" };
+            }
+
+            if (substr(self.contents[1..], "Xfer:memory-map:read")) {
+                var tokens = std.mem.tokenize(u8, self.contents[1..], ":,");
+                _ = tokens.next(); // Xfer
+                _ = tokens.next(); // memory-map
+                _ = tokens.next(); // read
+                const offset_str = tokens.next() orelse return .{ .static = "E9999" };
+                const length_str = tokens.next() orelse return .{ .static = "E9999" };
+
+                const offset = try std.fmt.parseInt(usize, offset_str, 16);
+                const length = try std.fmt.parseInt(usize, length_str, 16);
+
+                // see above
+                const len = @min(length, (memory_map.len + 1) - offset);
+                const ret = try allocator.alloc(u8, len);
+
+                ret[0] = if (ret.len < length) 'l' else 'm';
+                std.mem.copy(u8, ret[1..], memory_map[offset..]);
+
+                return .{ .alloc = ret };
             }
 
             log.warn("Unimplemented: {s}", .{self.contents});
