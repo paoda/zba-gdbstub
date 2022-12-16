@@ -107,34 +107,44 @@ pub fn run(self: *Self, allocator: Allocator) !void {
 }
 
 fn parse(self: *Self, allocator: Allocator, input: []const u8) !Action {
+    // log.debug("-> {s}", .{input});
+
     return switch (input[0]) {
-        '+' => .nothing,
-        '-' => .retry,
-        '$' => blk: {
-            // Packet
-            var packet = Packet.from(allocator, input) catch return .nack;
-            defer packet.deinit(allocator);
+        '+' => blk: {
+            if (input.len == 1) break :blk .nothing;
 
-            var string = packet.parse(allocator, self.emu) catch return .nack;
-            defer string.deinit(allocator);
-
-            const reply = string.inner();
-
-            // deallocated by the caller
-            const response = try std.fmt.allocPrint(allocator, "${s}#{x:0>2}", .{ reply, Packet.checksum(reply) });
-
-            break :blk .{ .send = response };
+            break :blk switch (input[1]) {
+                '$' => self.handlePacket(allocator, input[1..]),
+                else => std.debug.panic("Unknown: {s}", .{input}),
+            };
         },
+        '-' => .retry,
+        '$' => try self.handlePacket(allocator, input),
         '\x03' => .nothing,
         else => std.debug.panic("Unknown: {s}", .{input}),
     };
 }
 
+fn handlePacket(self: *Self, allocator: Allocator, input: []const u8) !Action {
+    var packet = Packet.from(allocator, input) catch return .nack;
+    defer packet.deinit(allocator);
+
+    var string = packet.parse(allocator, self.emu) catch return .nack;
+    defer string.deinit(allocator);
+
+    const reply = string.inner();
+
+    // deallocated by the caller
+    const response = try std.fmt.allocPrint(allocator, "+${s}#{x:0>2}", .{ reply, Packet.checksum(reply) });
+
+    return .{ .send = response };
+}
+
 fn send(self: *Self, allocator: Allocator, action: Action) !void {
     switch (action) {
         .send => |pkt| {
-            _ = try self.client.send("+"); // ACK
             _ = try self.client.send(pkt);
+            // log.debug("<- {s}", .{pkt});
 
             self.reset(allocator);
             self.pkt_cache = pkt;
@@ -142,14 +152,21 @@ fn send(self: *Self, allocator: Allocator, action: Action) !void {
         .retry => {
             log.warn("received nack, resending: \"{?s}\"", .{self.pkt_cache});
 
-            if (self.pkt_cache) |pkt| _ = try self.client.send(pkt); // FIXME: is an ack to a nack necessary?
+            if (self.pkt_cache) |pkt| {
+                _ = try self.client.send(pkt);
+                // log.debug("<- {s}", .{pkt});
+            }
         },
         .ack => {
             _ = try self.client.send("+");
+            // log.debug("<- +", .{});
+
             self.reset(allocator);
         },
         .nack => {
             _ = try self.client.send("-");
+            // log.debug("<- -", .{});
+
             self.reset(allocator);
         },
         .nothing => self.reset(allocator),

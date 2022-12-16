@@ -19,8 +19,6 @@ pub fn from(allocator: Allocator, str: []const u8) !Self {
     const chksum_str = tokens.next() orelse return error.MissingCheckSum;
     const chksum = std.fmt.parseInt(u8, chksum_str, 16) catch return error.InvalidChecksum;
 
-    // log.info("Contents: {s}", .{contents});
-
     if (!Self.verify(contents, chksum)) return error.ChecksumMismatch;
 
     return .{ .contents = try allocator.dupe(u8, contents) };
@@ -99,10 +97,8 @@ pub fn parse(self: *Self, allocator: Allocator, emu: Emulator) !String {
         'M' => @panic("TODO: Memory Write"),
         'c' => @panic("TODO: Continue"),
         's' => {
-            var tokens = std.mem.tokenize(u8, self.contents[1..], " ");
-            const addr = if (tokens.next()) |s| try std.fmt.parseInt(u32, s, 16) else null;
-
-            log.debug("s addr: {?X:0>8}", .{addr});
+            // var tokens = std.mem.tokenize(u8, self.contents[1..], " ");
+            // const addr = if (tokens.next()) |s| try std.fmt.parseInt(u32, s, 16) else null;
 
             emu.step();
 
@@ -111,18 +107,8 @@ pub fn parse(self: *Self, allocator: Allocator, emu: Emulator) !String {
         },
 
         // Optional
-        // 'S' => {
-        //     var tokens = std.mem.tokenize(u8, self.contents[1..], " ");
-        //     const signal = if (tokens.next()) |s| try std.fmt.parseInt(u8, s, 16) else null;
-        //     log.debug("S signal: {?}", .{signal});
-
-        //     emu.step();
-
-        //     const ret = try std.fmt.allocPrint(allocator, "S{x:0>2}", .{@enumToInt(Signal.Trap)});
-        //     return .{ .alloc = ret };
-        // },
         'D' => {
-            log.info("Disconneccting...", .{});
+            log.info("Disconnecting...", .{});
             return .{ .static = "OK" };
         },
         'H' => return .{ .static = "" },
@@ -153,13 +139,11 @@ pub fn parse(self: *Self, allocator: Allocator, emu: Emulator) !String {
                 _ = tokens.next(); // Xfer
                 _ = tokens.next(); // features
                 _ = tokens.next(); // read
-                const annex = tokens.next() orelse return .{ .static = "E00" };
-                const offset_str = tokens.next() orelse return .{ .static = "E00" };
-                const length_str = tokens.next() orelse return .{ .static = "E00" };
+                const annex = tokens.next() orelse return .{ .static = "E9999" };
+                const offset_str = tokens.next() orelse return .{ .static = "E99999" };
+                const length_str = tokens.next() orelse return .{ .static = "E9999" };
 
                 if (std.mem.eql(u8, annex, "target.xml")) {
-                    log.info("Providing ARMv4T target description", .{});
-
                     const offset = try std.fmt.parseInt(usize, offset_str, 16);
                     const length = try std.fmt.parseInt(usize, length_str, 16);
 
@@ -175,7 +159,7 @@ pub fn parse(self: *Self, allocator: Allocator, emu: Emulator) !String {
                     return .{ .alloc = ret };
                 } else {
                     log.err("Unexpected Annex: {s}", .{annex});
-                    return .{ .static = "E00" };
+                    return .{ .static = "E9999" };
                 }
 
                 return .{ .static = "" };
@@ -188,8 +172,6 @@ pub fn parse(self: *Self, allocator: Allocator, emu: Emulator) !String {
                 _ = tokens.next(); // read
                 const offset_str = tokens.next() orelse return .{ .static = "E9999" };
                 const length_str = tokens.next() orelse return .{ .static = "E9999" };
-
-                log.info("Providing GBA memory map", .{});
 
                 const offset = try std.fmt.parseInt(usize, offset_str, 16);
                 const length = try std.fmt.parseInt(usize, length_str, 16);
