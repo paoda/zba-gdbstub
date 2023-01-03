@@ -28,31 +28,31 @@ pub const Emulator = struct {
             pub fn readImpl(pointer: *anyopaque, addr: u32) u8 {
                 const self = @ptrCast(Ptr, @alignCast(alignment, pointer));
 
-                return @call(.{ .modifier = .always_inline }, ptr_info.Pointer.child.read, .{ self, addr });
+                return @call(.always_inline, ptr_info.Pointer.child.read, .{ self, addr });
             }
 
             pub fn writeImpl(pointer: *anyopaque, addr: u32, value: u8) void {
                 const self = @ptrCast(Ptr, @alignCast(alignment, pointer));
 
-                return @call(.{ .modifier = .always_inline }, ptr_info.Pointer.child.write, .{ self, addr, value });
+                return @call(.always_inline, ptr_info.Pointer.child.write, .{ self, addr, value });
             }
 
             pub fn registersImpl(pointer: *anyopaque) *[16]u32 {
                 const self = @ptrCast(Ptr, @alignCast(alignment, pointer));
 
-                return @call(.{ .modifier = .always_inline }, ptr_info.Pointer.child.registers, .{self});
+                return @call(.always_inline, ptr_info.Pointer.child.registers, .{self});
             }
 
             pub fn cpsrImpl(pointer: *anyopaque) u32 {
                 const self = @ptrCast(Ptr, @alignCast(alignment, pointer));
 
-                return @call(.{ .modifier = .always_inline }, ptr_info.Pointer.child.cpsr, .{self});
+                return @call(.always_inline, ptr_info.Pointer.child.cpsr, .{self});
             }
 
             pub fn stepImpl(pointer: *anyopaque) void {
                 const self = @ptrCast(Ptr, @alignCast(alignment, pointer));
 
-                return @call(.{ .modifier = .always_inline }, ptr_info.Pointer.child.step, .{self});
+                return @call(.always_inline, ptr_info.Pointer.child.step, .{self});
             }
         };
 

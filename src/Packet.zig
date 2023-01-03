@@ -87,6 +87,9 @@ pub fn parse(self: *Self, allocator: Allocator, emu: Emulator) !String {
             {
                 var i: u32 = 0;
                 while (i < len) : (i += 1) {
+                    const value = emu.read(addr + i);
+                    log.debug("read 0x{X:0>2} from 0x{X:0>8}", .{ value, addr + i });
+
                     // writes the formatted integer to the buffer, returns a slice to the buffer but we ignore that
                     _ = std.fmt.bufPrintIntToSlice(ret[i * 2 ..][0..2], emu.read(addr + i), 16, .lower, .{ .fill = '0', .width = 2 });
                 }
