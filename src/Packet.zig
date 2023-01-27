@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 const Emulator = @import("lib.zig").Emulator;
+const State = @import("State.zig");
 
 const target = @import("Server.zig").target;
 const memory_map = @import("Server.zig").memory_map;
@@ -45,7 +46,7 @@ const String = union(enum) {
     }
 };
 
-pub fn parse(self: *Self, allocator: Allocator, emu: Emulator) !String {
+pub fn parse(self: *Self, allocator: Allocator, state: *State, emu: Emulator) !String {
     switch (self.contents[0]) {
         // Required
         '?' => {
@@ -87,9 +88,6 @@ pub fn parse(self: *Self, allocator: Allocator, emu: Emulator) !String {
             {
                 var i: u32 = 0;
                 while (i < len) : (i += 1) {
-                    const value = emu.read(addr + i);
-                    log.debug("read 0x{X:0>2} from 0x{X:0>8}", .{ value, addr + i });
-
                     // writes the formatted integer to the buffer, returns a slice to the buffer but we ignore that
                     _ = std.fmt.bufPrintIntToSlice(ret[i * 2 ..][0..2], emu.read(addr + i), 16, .lower, .{ .fill = '0', .width = 2 });
                 }
@@ -98,15 +96,63 @@ pub fn parse(self: *Self, allocator: Allocator, emu: Emulator) !String {
             return .{ .alloc = ret };
         },
         'M' => @panic("TODO: Memory Write"),
-        'c' => @panic("TODO: Continue"),
+        'c' => {
+            while (true) {
+                emu.step();
+
+                const r = emu.registers();
+                const is_thumb = emu.cpsr() >> 5 & 1 == 1;
+                const r15 = r[15] -| if (is_thumb) @as(u32, 4) else 8;
+
+                if (state.hw_bkpt.isHit(r15)) {
+                    return .{ .static = "T05 hwbreak;" };
+                }
+            }
+        },
         's' => {
             // var tokens = std.mem.tokenize(u8, self.contents[1..], " ");
             // const addr = if (tokens.next()) |s| try std.fmt.parseInt(u32, s, 16) else null;
 
             emu.step();
+            return .{ .static = "S05" }; // Signal.Trap
+        },
 
-            const ret = try std.fmt.allocPrint(allocator, "S{x:0>2}", .{@enumToInt(Signal.Trap)});
-            return .{ .alloc = ret };
+        // Breakpoints
+        'z' => switch (self.contents[1]) {
+            '0' => @panic("TODO: Remove Software Breakpoint"),
+            '1' => {
+                var tokens = std.mem.tokenize(u8, self.contents[2..], ",");
+                const addr_str = tokens.next() orelse return .{ .static = "E9999" };
+                // const kind_str = tokens.next() orelse return .{ .static = "E9999" };
+
+                const addr = try std.fmt.parseInt(u32, addr_str, 16);
+                // const kind = try std.fmt.parseInt(u32, kind_str, 16);
+
+                state.hw_bkpt.remove(addr);
+                return .{ .static = "OK" };
+            },
+            '2' => @panic("TODO: Remove Write Watchpoint"),
+            '3' => @panic("TODO: Remove Read Watchpoint"),
+            '4' => @panic("TODO: Remove Access Watchpoint"),
+            else => return .{ .static = "" },
+        },
+        'Z' => switch (self.contents[1]) {
+            '0' => @panic("TODO: Insert Software Breakpoint"),
+            '1' => {
+                var tokens = std.mem.tokenize(u8, self.contents[2..], ",");
+                const addr_str = tokens.next() orelse return .{ .static = "E9999" };
+                const kind_str = tokens.next() orelse return .{ .static = "E9999" };
+
+                const addr = try std.fmt.parseInt(u32, addr_str, 16);
+                const kind = try std.fmt.parseInt(u32, kind_str, 16);
+
+                try state.hw_bkpt.add(addr, kind);
+                return .{ .static = "OK" };
+            },
+            '2' => @panic("TODO: Insert Write Watchpoint"),
+            '3' => @panic("TODO: Insert Read Watchpoint"),
+            '4' => @panic("TODO: Insert Access Watchpoint"),
+            else => return .{ .static = "" },
         },
 
         // Optional
