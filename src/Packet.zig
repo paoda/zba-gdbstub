@@ -46,7 +46,7 @@ const String = union(enum) {
     }
 };
 
-pub fn parse(self: *Self, allocator: Allocator, state: *State, emu: Emulator) !String {
+pub fn parse(self: *Self, allocator: Allocator, emu: *Emulator) !String {
     switch (self.contents[0]) {
         // Required
         '?' => {
@@ -97,24 +97,25 @@ pub fn parse(self: *Self, allocator: Allocator, state: *State, emu: Emulator) !S
         },
         'M' => @panic("TODO: Memory Write"),
         'c' => {
-            while (true) {
-                emu.step();
-
-                const r = emu.registers();
-                const is_thumb = emu.cpsr() >> 5 & 1 == 1;
-                const r15 = r[15] -| if (is_thumb) @as(u32, 4) else 8;
-
-                if (state.hw_bkpt.isHit(r15)) {
-                    return .{ .static = "T05 hwbreak;" };
-                }
+            switch (emu.contd()) {
+                .SingleStep => unreachable,
+                .Trap => |r| switch (r) {
+                    .HwBkpt => return .{ .static = "T05 hwbreak:;" },
+                    .SwBkpt => return .{ .static = "T05 swbreak:;" },
+                },
             }
         },
         's' => {
             // var tokens = std.mem.tokenize(u8, self.contents[1..], " ");
             // const addr = if (tokens.next()) |s| try std.fmt.parseInt(u32, s, 16) else null;
 
-            emu.step();
-            return .{ .static = "S05" }; // Signal.Trap
+            switch (emu.step()) {
+                .SingleStep => return .{ .static = "T05" },
+                .Trap => |r| switch (r) {
+                    .HwBkpt => return .{ .static = "T05 hwbreak:;" },
+                    .SwBkpt => return .{ .static = "T05 swbreak:;" },
+                },
+            }
         },
 
         // Breakpoints
@@ -126,7 +127,7 @@ pub fn parse(self: *Self, allocator: Allocator, state: *State, emu: Emulator) !S
                 const addr_str = tokens.next() orelse return error.InvalidPacket;
                 const addr = try std.fmt.parseInt(u32, addr_str, 16);
 
-                state.hw_bkpt.remove(addr);
+                emu.state.hw_bkpt.remove(addr);
                 return .{ .static = "OK" };
             },
             '2' => return .{ .static = "" }, // TODO: Remove Write Watchpoint
@@ -144,7 +145,7 @@ pub fn parse(self: *Self, allocator: Allocator, state: *State, emu: Emulator) !S
                 const addr = try std.fmt.parseInt(u32, addr_str, 16);
                 const kind = try std.fmt.parseInt(u32, kind_str, 16);
 
-                state.hw_bkpt.add(addr, kind) catch |e| {
+                emu.state.hw_bkpt.add(addr, kind) catch |e| {
                     switch (e) {
                         error.OutOfSpace => return .{ .static = "E22" }, // FIXME: Which errno?
                         else => return e,

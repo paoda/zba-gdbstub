@@ -1,9 +1,19 @@
 /// Re-export of the server interface
 pub const Server = @import("Server.zig");
+const State = @import("State.zig");
 
 /// Interface for interacting between GDB and a GBA emu
 pub const Emulator = struct {
     const Self = @This();
+
+    const Signal = union(enum) {
+        const Kind = enum { HwBkpt, SwBkpt };
+
+        Trap: Kind,
+        SingleStep: void,
+    };
+
+    state: State = .{},
 
     ptr: *anyopaque,
 
@@ -75,7 +85,27 @@ pub const Emulator = struct {
         return self.cpsrFn(self.ptr);
     }
 
-    pub inline fn step(self: Self) void {
+    pub inline fn contd(self: *Self) Signal {
+        while (true) {
+            const signal = self.step();
+
+            switch (signal) {
+                .SingleStep => {},
+                .Trap => return signal,
+            }
+        }
+    }
+
+    pub inline fn step(self: *Self) Signal {
         self.stepFn(self.ptr);
+
+        const r = self.registersFn(self.ptr);
+        const is_thumb = self.cpsrFn(self.ptr) >> 5 & 1 == 1;
+
+        const r15 = r[15] -| if (is_thumb) @as(u32, 4) else 8;
+
+        if (self.state.hw_bkpt.isHit(r15)) return .{ .Trap = .HwBkpt };
+
+        return .SingleStep;
     }
 };

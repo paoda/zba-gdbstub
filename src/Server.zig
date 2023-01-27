@@ -1,7 +1,6 @@
 const std = @import("std");
 const network = @import("network");
 const Packet = @import("Packet.zig");
-const State = @import("State.zig");
 
 const Socket = network.Socket;
 const Allocator = std.mem.Allocator;
@@ -60,7 +59,6 @@ pkt_cache: ?[]const u8 = null,
 client: Socket,
 _socket: Socket,
 
-state: State = .{},
 emu: Emulator,
 
 pub fn init(emulator: Emulator) !Self {
@@ -131,7 +129,7 @@ fn handlePacket(self: *Self, allocator: Allocator, input: []const u8) !Action {
     var packet = Packet.from(allocator, input) catch return .nack;
     defer packet.deinit(allocator);
 
-    var string = packet.parse(allocator, &self.state, self.emu) catch return .nack;
+    var string = packet.parse(allocator, &self.emu) catch return .nack;
     defer string.deinit(allocator);
 
     const reply = string.inner();
