@@ -77,8 +77,8 @@ pub fn parse(self: *Self, allocator: Allocator, state: *State, emu: Emulator) !S
         'G' => @panic("TODO: Register Write"),
         'm' => {
             var tokens = std.mem.tokenize(u8, self.contents[1..], ",");
-            const addr_str = tokens.next() orelse return .{ .static = "E9999" }; // EUNKNOWN
-            const length_str = tokens.next() orelse return .{ .static = "E9999" }; // EUNKNOWN
+            const addr_str = tokens.next() orelse return error.InvalidPacket;
+            const length_str = tokens.next() orelse return error.InvalidPacket;
 
             const addr = try std.fmt.parseInt(u32, addr_str, 16);
             const len = try std.fmt.parseInt(u32, length_str, 16);
@@ -119,39 +119,43 @@ pub fn parse(self: *Self, allocator: Allocator, state: *State, emu: Emulator) !S
 
         // Breakpoints
         'z' => switch (self.contents[1]) {
-            '0' => @panic("TODO: Remove Software Breakpoint"),
+            '0' => return .{ .static = "" }, //TODO: Remove Software Breakpoint
             '1' => {
                 var tokens = std.mem.tokenize(u8, self.contents[2..], ",");
-                const addr_str = tokens.next() orelse return .{ .static = "E9999" };
-                // const kind_str = tokens.next() orelse return .{ .static = "E9999" };
 
+                const addr_str = tokens.next() orelse return error.InvalidPacket;
                 const addr = try std.fmt.parseInt(u32, addr_str, 16);
-                // const kind = try std.fmt.parseInt(u32, kind_str, 16);
 
                 state.hw_bkpt.remove(addr);
                 return .{ .static = "OK" };
             },
-            '2' => @panic("TODO: Remove Write Watchpoint"),
-            '3' => @panic("TODO: Remove Read Watchpoint"),
-            '4' => @panic("TODO: Remove Access Watchpoint"),
+            '2' => return .{ .static = "" }, // TODO: Remove Write Watchpoint
+            '3' => return .{ .static = "" }, // TODO: Remove Read Watchpoint
+            '4' => return .{ .static = "" }, // TODO: Remove Access Watchpoint
             else => return .{ .static = "" },
         },
         'Z' => switch (self.contents[1]) {
-            '0' => @panic("TODO: Insert Software Breakpoint"),
+            '0' => return .{ .static = "" }, //TODO: Insert Software Breakpoint
             '1' => {
                 var tokens = std.mem.tokenize(u8, self.contents[2..], ",");
-                const addr_str = tokens.next() orelse return .{ .static = "E9999" };
-                const kind_str = tokens.next() orelse return .{ .static = "E9999" };
+                const addr_str = tokens.next() orelse return error.InvalidPacket;
+                const kind_str = tokens.next() orelse return error.InvalidPacket;
 
                 const addr = try std.fmt.parseInt(u32, addr_str, 16);
                 const kind = try std.fmt.parseInt(u32, kind_str, 16);
 
-                try state.hw_bkpt.add(addr, kind);
+                state.hw_bkpt.add(addr, kind) catch |e| {
+                    switch (e) {
+                        error.OutOfSpace => return .{ .static = "E22" }, // FIXME: Which errno?
+                        else => return e,
+                    }
+                };
+
                 return .{ .static = "OK" };
             },
-            '2' => @panic("TODO: Insert Write Watchpoint"),
-            '3' => @panic("TODO: Insert Read Watchpoint"),
-            '4' => @panic("TODO: Insert Access Watchpoint"),
+            '2' => return .{ .static = "" }, // TODO: Insert Write Watchpoint
+            '3' => return .{ .static = "" }, // TODO: Insert Read Watchpoint
+            '4' => return .{ .static = "" }, // TODO: Insert Access Watchpoint
             else => return .{ .static = "" },
         },
 
@@ -171,6 +175,7 @@ pub fn parse(self: *Self, allocator: Allocator, state: *State, emu: Emulator) !S
         },
         'q' => {
             if (self.contents[1] == 'C' and self.contents.len == 2) return .{ .static = "QC1" };
+
             if (substr(self.contents[1..], "fThreadInfo")) return .{ .static = "m1" };
             if (substr(self.contents[1..], "sThreadInfo")) return .{ .static = "l" };
             if (substr(self.contents[1..], "Attached")) return .{ .static = "1" }; // Tell GDB we're attached to a process
@@ -188,9 +193,10 @@ pub fn parse(self: *Self, allocator: Allocator, state: *State, emu: Emulator) !S
                 _ = tokens.next(); // Xfer
                 _ = tokens.next(); // features
                 _ = tokens.next(); // read
-                const annex = tokens.next() orelse return .{ .static = "E9999" };
-                const offset_str = tokens.next() orelse return .{ .static = "E99999" };
-                const length_str = tokens.next() orelse return .{ .static = "E9999" };
+
+                const annex = tokens.next() orelse return error.InvalidPacket;
+                const offset_str = tokens.next() orelse return error.InvalidPacket;
+                const length_str = tokens.next() orelse return error.InvalidPacket;
 
                 if (std.mem.eql(u8, annex, "target.xml")) {
                     const offset = try std.fmt.parseInt(usize, offset_str, 16);
@@ -219,8 +225,8 @@ pub fn parse(self: *Self, allocator: Allocator, state: *State, emu: Emulator) !S
                 _ = tokens.next(); // Xfer
                 _ = tokens.next(); // memory-map
                 _ = tokens.next(); // read
-                const offset_str = tokens.next() orelse return .{ .static = "E9999" };
-                const length_str = tokens.next() orelse return .{ .static = "E9999" };
+                const offset_str = tokens.next() orelse return error.InvalidPacket;
+                const length_str = tokens.next() orelse return error.InvalidPacket;
 
                 const offset = try std.fmt.parseInt(usize, offset_str, 16);
                 const length = try std.fmt.parseInt(usize, length_str, 16);
