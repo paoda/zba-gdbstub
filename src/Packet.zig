@@ -49,10 +49,7 @@ const String = union(enum) {
 pub fn parse(self: *Self, allocator: Allocator, emu: *Emulator) !String {
     switch (self.contents[0]) {
         // Required
-        '?' => {
-            const ret = try std.fmt.allocPrint(allocator, "S{x:0>2}", .{@enumToInt(Signal.Int)});
-            return .{ .alloc = ret };
-        },
+        '?' => return .{ .static = "T05" }, // FIXME: which errno?
         'g' => {
             const r = emu.registers();
             const cpsr = emu.cpsr();
@@ -140,45 +137,55 @@ pub fn parse(self: *Self, allocator: Allocator, emu: *Emulator) !String {
         },
 
         // Breakpoints
-        'z' => switch (self.contents[1]) {
-            '0' => return .{ .static = "" }, //TODO: Remove Software Breakpoint
-            '1' => {
-                var tokens = std.mem.tokenize(u8, self.contents[2..], ",");
+        'z' => {
+            var tokens = std.mem.tokenize(u8, self.contents[2..], ",");
 
-                const addr_str = tokens.next() orelse return error.InvalidPacket;
-                const addr = try std.fmt.parseInt(u32, addr_str, 16);
+            const addr_str = tokens.next() orelse return error.InvalidPacket;
+            const addr = try std.fmt.parseInt(u32, addr_str, 16);
 
-                emu.state.hw_bkpt.remove(addr);
-                return .{ .static = "OK" };
-            },
-            '2' => return .{ .static = "" }, // TODO: Remove Write Watchpoint
-            '3' => return .{ .static = "" }, // TODO: Remove Read Watchpoint
-            '4' => return .{ .static = "" }, // TODO: Remove Access Watchpoint
-            else => return .{ .static = "" },
+            switch (self.contents[1]) {
+                '0' => {
+                    emu.removeBkpt(.Software, addr);
+                    return .{ .static = "OK" };
+                },
+                '1' => {
+                    emu.removeBkpt(.Hardware, addr);
+                    return .{ .static = "OK" };
+                },
+                '2' => return .{ .static = "" }, // TODO: Remove Write Watchpoint
+                '3' => return .{ .static = "" }, // TODO: Remove Read Watchpoint
+                '4' => return .{ .static = "" }, // TODO: Remove Access Watchpoint
+                else => return .{ .static = "" },
+            }
         },
-        'Z' => switch (self.contents[1]) {
-            '0' => return .{ .static = "" }, //TODO: Insert Software Breakpoint
-            '1' => {
-                var tokens = std.mem.tokenize(u8, self.contents[2..], ",");
-                const addr_str = tokens.next() orelse return error.InvalidPacket;
-                const kind_str = tokens.next() orelse return error.InvalidPacket;
+        'Z' => {
+            var tokens = std.mem.tokenize(u8, self.contents[2..], ",");
+            const addr_str = tokens.next() orelse return error.InvalidPacket;
+            const kind_str = tokens.next() orelse return error.InvalidPacket;
 
-                const addr = try std.fmt.parseInt(u32, addr_str, 16);
-                const kind = try std.fmt.parseInt(u32, kind_str, 16);
+            const addr = try std.fmt.parseInt(u32, addr_str, 16);
+            const kind = try std.fmt.parseInt(u32, kind_str, 16);
 
-                emu.state.hw_bkpt.add(addr, kind) catch |e| {
-                    switch (e) {
-                        error.OutOfSpace => return .{ .static = "E22" }, // FIXME: Which errno?
-                        else => return e,
-                    }
-                };
+            switch (self.contents[1]) {
+                '0' => {
+                    try emu.addBkpt(.Software, addr, kind);
+                    return .{ .static = "OK" };
+                },
+                '1' => {
+                    emu.addBkpt(.Hardware, addr, kind) catch |e| {
+                        switch (e) {
+                            error.OutOfSpace => return .{ .static = "E22" }, // FIXME: which errno?
+                            else => return e,
+                        }
+                    };
 
-                return .{ .static = "OK" };
-            },
-            '2' => return .{ .static = "" }, // TODO: Insert Write Watchpoint
-            '3' => return .{ .static = "" }, // TODO: Insert Read Watchpoint
-            '4' => return .{ .static = "" }, // TODO: Insert Access Watchpoint
-            else => return .{ .static = "" },
+                    return .{ .static = "OK" };
+                },
+                '2' => return .{ .static = "" }, // TODO: Insert Write Watchpoint
+                '3' => return .{ .static = "" }, // TODO: Insert Read Watchpoint
+                '4' => return .{ .static = "" }, // TODO: Insert Access Watchpoint
+                else => return .{ .static = "" },
+            }
         },
 
         // TODO: Figure out the difference between 'M' and 'X'
@@ -202,7 +209,7 @@ pub fn parse(self: *Self, allocator: Allocator, emu: *Emulator) !String {
             if (substr(self.contents[1..], "Attached")) return .{ .static = "1" }; // Tell GDB we're attached to a process
 
             if (substr(self.contents[1..], "Supported")) {
-                const format = "PacketSize={x:};qXfer:features:read+;qXfer:memory-map:read+";
+                const format = "PacketSize={x:};swbreak+;hwbreak+;qXfer:features:read+;qXfer:memory-map:read+";
                 // TODO: Anything else?
 
                 const ret = try std.fmt.allocPrint(allocator, format, .{Self.max_len});

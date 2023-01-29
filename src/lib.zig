@@ -1,3 +1,6 @@
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+
 /// Re-export of the server interface
 pub const Server = @import("Server.zig");
 const State = @import("State.zig");
@@ -13,7 +16,7 @@ pub const Emulator = struct {
         SingleStep: void,
     };
 
-    state: State = .{},
+    state: State,
 
     ptr: *anyopaque,
 
@@ -25,7 +28,7 @@ pub const Emulator = struct {
 
     stepFn: *const fn (*anyopaque) void,
 
-    pub fn init(ptr: anytype) Self {
+    pub fn init(allocator: Allocator, ptr: anytype) Self {
         const Ptr = @TypeOf(ptr);
         const ptr_info = @typeInfo(Ptr);
 
@@ -66,7 +69,21 @@ pub const Emulator = struct {
             }
         };
 
-        return .{ .ptr = ptr, .readFn = gen.readImpl, .writeFn = gen.writeImpl, .registersFn = gen.registersImpl, .cpsrFn = gen.cpsrImpl, .stepFn = gen.stepImpl };
+        return .{
+            .ptr = ptr,
+            .readFn = gen.readImpl,
+            .writeFn = gen.writeImpl,
+            .registersFn = gen.registersImpl,
+            .cpsrFn = gen.cpsrImpl,
+            .stepFn = gen.stepImpl,
+
+            .state = State.init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.state.deinit();
+        self.* = undefined;
     }
 
     pub inline fn read(self: Self, addr: u32) u8 {
@@ -104,8 +121,26 @@ pub const Emulator = struct {
 
         const r15 = r[15] -| if (is_thumb) @as(u32, 4) else 8;
 
+        if (self.state.sw_bkpt.isHit(r15)) return .{ .Trap = .SwBkpt };
         if (self.state.hw_bkpt.isHit(r15)) return .{ .Trap = .HwBkpt };
 
         return .SingleStep;
+    }
+
+    const BkptType = enum { Hardware, Software };
+
+    // TODO: Consider properly implementing Software interrupts?
+    pub fn addBkpt(self: *Self, comptime @"type": BkptType, addr: u32, kind: u32) !void {
+        switch (@"type") {
+            .Hardware => try self.state.hw_bkpt.add(addr, kind),
+            .Software => try self.state.sw_bkpt.add(addr, kind),
+        }
+    }
+
+    pub fn removeBkpt(self: *Self, comptime @"type": BkptType, addr: u32) void {
+        switch (@"type") {
+            .Hardware => self.state.hw_bkpt.remove(addr),
+            .Software => self.state.sw_bkpt.remove(addr),
+        }
     }
 };
