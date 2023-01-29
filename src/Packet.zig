@@ -95,7 +95,28 @@ pub fn parse(self: *Self, allocator: Allocator, emu: *Emulator) !String {
 
             return .{ .alloc = ret };
         },
-        'M' => @panic("TODO: Memory Write"),
+        'M' => {
+            var tokens = std.mem.tokenize(u8, self.contents[1..], ",:");
+
+            const addr_str = tokens.next() orelse return error.InvalidPacket;
+            const length_str = tokens.next() orelse return error.InvalidPacket;
+            const bytes = tokens.next() orelse return error.InvalidPacket;
+
+            const addr = try std.fmt.parseInt(u32, addr_str, 16);
+            const len = try std.fmt.parseInt(u32, length_str, 16);
+
+            {
+                var i: u32 = 0;
+                while (i < len) : (i += 1) {
+                    const str = bytes[2 * i ..][0..2];
+                    const value = try std.fmt.parseInt(u8, str, 16);
+
+                    emu.write(addr + i, value);
+                }
+            }
+
+            return .{ .static = "OK" };
+        },
         'c' => {
             switch (emu.contd()) {
                 .SingleStep => unreachable,
@@ -160,18 +181,17 @@ pub fn parse(self: *Self, allocator: Allocator, emu: *Emulator) !String {
             else => return .{ .static = "" },
         },
 
-        // Optional
+        // TODO: Figure out the difference between 'M' and 'X'
         'D' => {
             log.info("Disconnecting...", .{});
             return .{ .static = "OK" };
         },
         'H' => return .{ .static = "" },
         'v' => {
-            if (substr(self.contents[1..], "MustReplyEmpty")) {
-                return .{ .static = "" };
+            if (!substr(self.contents[1..], "MustReplyEmpty")) {
+                log.warn("Unimplemented: {s}", .{self.contents});
             }
 
-            log.warn("Unimplemented: {s}", .{self.contents});
             return .{ .static = "" };
         },
         'q' => {
