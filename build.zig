@@ -1,54 +1,49 @@
 const std = @import("std");
+const CompileStep = std.Build.CompileStep;
 
 fn path(comptime suffix: []const u8) []const u8 {
     if (suffix[0] == '/') @compileError("expected a relative path");
     return comptime (std.fs.path.dirname(@src().file) orelse ".") ++ std.fs.path.sep_str ++ suffix;
 }
 
-const pkgs = struct {
-    const Pkg = std.build.Pkg;
-
-    pub const gdbstub: Pkg = .{
-        .name = "gdbstub",
-        .source = .{ .path = path("src/lib.zig") },
-        .dependencies = &[_]Pkg{network},
-    };
+pub fn link(exe: *CompileStep) void {
+    // create zig-network module
+    const b = exe.builder;
 
     // https://github.com/MasterQ32/zig-network
-    pub const network: Pkg = .{
-        .name = "network",
-        .source = .{ .path = path("lib/zig-network/network.zig") },
-    };
-};
+    const network = b.createModule(.{ .source_file = .{ .path = path("lib/zig-network/network.zig") } });
 
-pub fn link(exe: *std.build.LibExeObjStep) void {
-    exe.addPackage(pkgs.gdbstub);
+    const gdbstub = b.createModule(.{
+        .source_file = .{ .path = path("src/lib.zig") },
+        .dependencies = &.{.{ .name = "network", .module = network }},
+    });
+
+    exe.addModule("gdbstub", gdbstub);
 }
 
-pub fn build(b: *std.build.Builder) void {
+pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-    _ = target;
-    const mode = b.standardReleaseOptions();
+    // const optimize = b.standardOptimizeOption(.{});
 
-    // -- library --
-    const lib = b.addStaticLibrary("gdbstub", "src/lib.zig");
-    lib.addPackage(pkgs.network);
+    // -- Library --
 
-    lib.setBuildMode(mode);
-    lib.install();
+    const lib_test = b.addTest(.{
+        .root_source_file = .{ .path = "src/lib.zig" },
+        .target = target,
+    });
 
-    const lib_tests = b.addTest("src/lib.zig");
-    lib_tests.setBuildMode(mode);
+    const test_step = b.step("test", "Run Library Tests");
+    test_step.dependOn(&lib_test.step);
 
-    const test_step = b.step("lib-test", "Run Library Tests");
-    test_step.dependOn(&lib_tests.step);
+    // -- Executable --
 
-    // // -- Executable --
-    // const exe = b.addExecutable("gdbserver", "src/main.zig");
+    // const exe = b.addExecutable(.{
+    //     .name = "gdbserver",
+    //     .root_source_file = .{ .path = "src/main.zig" },
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
     // link(exe);
-
-    // exe.setTarget(target);
-    // exe.setBuildMode(mode);
     // exe.install();
 
     // const run_cmd = exe.run();
