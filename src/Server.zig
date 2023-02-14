@@ -4,6 +4,7 @@ const Packet = @import("Packet.zig");
 
 const Socket = network.Socket;
 const Allocator = std.mem.Allocator;
+const Atomic = std.atomic.Atomic;
 const Emulator = @import("lib.zig").Emulator;
 
 const Self = @This();
@@ -94,16 +95,21 @@ const Action = union(enum) {
     nack,
 };
 
-pub fn run(self: *Self, allocator: Allocator) !void {
+pub fn run(self: *Self, allocator: Allocator, quit: *Atomic(bool)) !void {
     var buf: [Packet.max_len]u8 = undefined;
 
     while (true) {
         const len = try self.client.receive(&buf);
         if (len == 0) break;
 
+        if (quit.load(.Monotonic)) break;
         const action = try self.parse(allocator, buf[0..len]);
         try self.send(allocator, action);
     }
+
+    // Just in case its the gdbstub that exited first,
+    // attempt to signal to the GUI that it should also exit
+    quit.store(true, .Monotonic);
 }
 
 fn parse(self: *Self, allocator: Allocator, input: []const u8) !Action {

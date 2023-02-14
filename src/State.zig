@@ -25,7 +25,7 @@ const SwBkpt = struct {
     }
 
     pub fn deinit(self: *@This()) void {
-        self.deinit();
+        self.list.deinit();
         self.* = undefined;
     }
 
