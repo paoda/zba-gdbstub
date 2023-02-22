@@ -47,7 +47,7 @@ const SwBkpt = struct {
     }
 
     pub fn remove(self: *@This(), addr: u32) void {
-        for (self.list.items) |bkpt, i| {
+        for (self.list.items, 0..) |bkpt, i| {
             if (bkpt.addr == addr) {
                 _ = self.list.orderedRemove(i);
                 log.debug("Removed Breakpoint at 0x{X:0>8}", .{addr});
@@ -73,7 +73,7 @@ const HwBkpt = struct {
     }
 
     pub fn add(self: *@This(), addr: u32, kind: u32) !void {
-        for (self.list) |*bkpt_opt| {
+        for (&self.list) |*bkpt_opt| {
             if (bkpt_opt.*) |bkpt| {
                 if (bkpt.addr == addr) return; // idempotent
             } else {
@@ -88,7 +88,7 @@ const HwBkpt = struct {
     }
 
     pub fn remove(self: *@This(), addr: u32) void {
-        for (self.list) |*bkpt_opt| {
+        for (&self.list) |*bkpt_opt| {
             const bkpt = bkpt_opt.* orelse continue;
 
             if (bkpt.addr == addr) {
