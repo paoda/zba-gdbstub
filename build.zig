@@ -6,19 +6,14 @@ fn path(comptime suffix: []const u8) []const u8 {
     return comptime (std.fs.path.dirname(@src().file) orelse ".") ++ std.fs.path.sep_str ++ suffix;
 }
 
-pub fn link(exe: *CompileStep) void {
-    // create zig-network module
-    const b = exe.builder;
-
+pub fn getModule(b: *std.Build) *std.build.Module {
     // https://github.com/MasterQ32/zig-network
     const network = b.createModule(.{ .source_file = .{ .path = path("lib/zig-network/network.zig") } });
 
-    const gdbstub = b.createModule(.{
+    return b.createModule(.{
         .source_file = .{ .path = path("src/lib.zig") },
         .dependencies = &.{.{ .name = "network", .module = network }},
     });
-
-    exe.addModule("gdbstub", gdbstub);
 }
 
 pub fn build(b: *std.Build) void {
