@@ -3,8 +3,8 @@
     .version = "0.1.0",
     .dependencies = .{
         .@"zig-network" = .{
-            .url = "https://github.com/MasterQ32/zig-network/archive/86c315be67c7567195cc426615d81202a39bbb91.tar.gz",
-            .hash = "1220746fef79fb9774d76a0a5d746ccf30cfc847bce4a3a7388c3451817b7ab92869",
+            .url = "https://github.com/MasterQ32/zig-network/archive/7b5f76ea09626b96755c027bf4bd5b7e45297027.tar.gz",
+            .hash = "122090e7cb4459c2224399a45c56f47462733b919aa547c96b8c14ee705bfa22976e",
         },
     },
 }

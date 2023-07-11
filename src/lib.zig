@@ -35,35 +35,33 @@ pub const Emulator = struct {
         if (ptr_info != .Pointer) @compileError("ptr must be a pointer");
         if (ptr_info.Pointer.size != .One) @compileError("ptr must be a single-item pointer");
 
-        const alignment = ptr_info.Pointer.alignment;
-
         const gen = struct {
             pub fn readImpl(pointer: *anyopaque, addr: u32) u8 {
-                const self = @ptrCast(Ptr, @alignCast(alignment, pointer));
+                const self: Ptr = @ptrCast(@alignCast(pointer));
 
                 return @call(.always_inline, ptr_info.Pointer.child.read, .{ self, addr });
             }
 
             pub fn writeImpl(pointer: *anyopaque, addr: u32, value: u8) void {
-                const self = @ptrCast(Ptr, @alignCast(alignment, pointer));
+                const self: Ptr = @ptrCast(@alignCast(pointer));
 
                 return @call(.always_inline, ptr_info.Pointer.child.write, .{ self, addr, value });
             }
 
             pub fn registersImpl(pointer: *anyopaque) *[16]u32 {
-                const self = @ptrCast(Ptr, @alignCast(alignment, pointer));
+                const self: Ptr = @ptrCast(@alignCast(pointer));
 
                 return @call(.always_inline, ptr_info.Pointer.child.registers, .{self});
             }
 
             pub fn cpsrImpl(pointer: *anyopaque) u32 {
-                const self = @ptrCast(Ptr, @alignCast(alignment, pointer));
+                const self: Ptr = @ptrCast(@alignCast(pointer));
 
                 return @call(.always_inline, ptr_info.Pointer.child.cpsr, .{self});
             }
 
             pub fn stepImpl(pointer: *anyopaque) void {
-                const self = @ptrCast(Ptr, @alignCast(alignment, pointer));
+                const self: Ptr = @ptrCast(@alignCast(pointer));
 
                 return @call(.always_inline, ptr_info.Pointer.child.step, .{self});
             }

@@ -293,7 +293,7 @@ pub fn checksum(input: []const u8) u8 {
     var sum: usize = 0;
     for (input) |char| sum += char;
 
-    return @truncate(u8, sum);
+    return @truncate(sum);
 }
 
 fn verify(input: []const u8, chksum: u8) bool {
