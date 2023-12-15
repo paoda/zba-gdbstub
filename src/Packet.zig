@@ -3,6 +3,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Emulator = @import("lib.zig").Emulator;
 const State = @import("State.zig");
+const Server = @import("Server.zig");
 
 const target = @import("Server.zig").target;
 const memory_map = @import("Server.zig").memory_map;
@@ -46,7 +47,7 @@ const String = union(enum) {
     }
 };
 
-pub fn parse(self: *Self, allocator: Allocator, emu: *Emulator) !String {
+pub fn parse(self: *Self, allocator: Allocator, state: *Server.State, emu: *Emulator) !String {
     switch (self.contents[0]) {
         // Required
         '?' => return .{ .static = "T05" }, // FIXME: which errno?
@@ -61,7 +62,7 @@ pub fn parse(self: *Self, allocator: Allocator, emu: *Emulator) !String {
                 var i: u32 = 0;
                 while (i < r.len + 1) : (i += 1) {
                     var reg: u32 = if (i < r.len) r[i] else cpsr;
-                    if (i == 15) reg -= if (cpsr >> 5 & 1 == 1) 4 else 8; // PC is ahead
+                    if (i == 15) reg -|= if (cpsr >> 5 & 1 == 1) 4 else 8; // PC is ahead
 
                     // writes the formatted integer to the buffer, returns a slice to the buffer but we ignore that
                     // GDB also expects the bytes to be in the opposite order for whatever reason
@@ -191,6 +192,8 @@ pub fn parse(self: *Self, allocator: Allocator, emu: *Emulator) !String {
         // TODO: Figure out the difference between 'M' and 'X'
         'D' => {
             log.info("Disconnecting...", .{});
+
+            state.should_quit = true;
             return .{ .static = "OK" };
         },
         'H' => return .{ .static = "" },

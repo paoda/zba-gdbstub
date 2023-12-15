@@ -57,20 +57,23 @@ pub const memory_map: []const u8 =
 // FIXME: Shouldn't this be a Packet Struct?
 pkt_cache: ?[]const u8 = null,
 
-server: Server,
+socket: Server,
+state: State = .{},
 
 emu: Emulator,
+
+pub const State = struct { should_quit: bool = false };
 
 pub fn init(emulator: Emulator) !Self {
     var server = std.net.StreamServer.init(.{});
     try server.listen(std.net.Address.initIp4([_]u8{0} ** 4, port));
 
-    return .{ .emu = emulator, .server = server };
+    return .{ .emu = emulator, .socket = server };
 }
 
 pub fn deinit(self: *Self, allocator: Allocator) void {
     self.reset(allocator);
-    self.server.deinit();
+    self.socket.deinit();
 
     self.* = undefined;
 }
@@ -86,11 +89,13 @@ const Action = union(enum) {
 pub fn run(self: *Self, allocator: Allocator, quit: *Atomic(bool)) !void {
     var buf: [Packet.max_len]u8 = undefined;
 
-    var client = try self.server.accept();
+    var client = try self.socket.accept();
     log.info("client connected from {}", .{client.address});
 
     while (true) {
-        const len = try client.stream.readAll(&buf);
+        if (self.state.should_quit) break;
+
+        const len = try client.stream.read(&buf);
         if (len == 0) break;
 
         if (quit.load(.Monotonic)) break;
@@ -127,7 +132,7 @@ fn handlePacket(self: *Self, allocator: Allocator, input: []const u8) !Action {
     var packet = Packet.from(allocator, input) catch return .nack;
     defer packet.deinit(allocator);
 
-    var string = packet.parse(allocator, &self.emu) catch return .nack;
+    var string = packet.parse(allocator, &self.state, &self.emu) catch return .nack;
     defer string.deinit(allocator);
 
     const reply = string.inner();

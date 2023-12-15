@@ -60,7 +60,7 @@ test Server {
     var server = try Server.init(iface);
     defer server.deinit(allocator);
 
-    const t = try std.Thread.spawn(.{}, clientFn, .{server.server.listen_address});
+    const t = try std.Thread.spawn(.{}, clientFn, .{server.socket.listen_address});
     defer t.join();
 
     var should_quit = std.atomic.Atomic(bool).init(false);
