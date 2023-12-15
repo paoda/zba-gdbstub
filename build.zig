@@ -15,11 +15,9 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const zig_network = b.dependency("zig-network", .{}); // https://github.com/MasterQ32/zig-network
-
     _ = b.addModule("gdbstub", .{
         .source_file = .{ .path = "src/lib.zig" },
-        .dependencies = &.{.{ .name = "network", .module = zig_network.module("network") }},
+        .dependencies = &.{},
     });
 
     // Creates a step for unit testing. This only builds the test executable

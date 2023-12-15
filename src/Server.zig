@@ -1,11 +1,11 @@
 const std = @import("std");
-const network = @import("network");
 const Packet = @import("Packet.zig");
-
-const Socket = network.Socket;
-const Allocator = std.mem.Allocator;
-const Atomic = std.atomic.Atomic;
 const Emulator = @import("lib.zig").Emulator;
+
+const Atomic = std.atomic.Atomic;
+const Allocator = std.mem.Allocator;
+const Server = std.net.StreamServer;
+const Connection = Server.Connection;
 
 const Self = @This();
 const log = std.log.scoped(.Server);
@@ -57,32 +57,20 @@ pub const memory_map: []const u8 =
 // FIXME: Shouldn't this be a Packet Struct?
 pkt_cache: ?[]const u8 = null,
 
-client: Socket,
-_socket: Socket,
+server: Server,
 
 emu: Emulator,
 
 pub fn init(emulator: Emulator) !Self {
-    try network.init();
+    var server = std.net.StreamServer.init(.{});
+    try server.listen(std.net.Address.initIp4([_]u8{0} ** 4, port));
 
-    var socket = try Socket.create(.ipv4, .tcp);
-    try socket.bindToPort(port);
-    try socket.listen();
-
-    var client = try socket.accept(); // TODO: This blocks, is this OK?
-
-    const endpoint = try client.getLocalEndPoint();
-    log.info("client connected from {}", .{endpoint});
-
-    return .{ .emu = emulator, ._socket = socket, .client = client };
+    return .{ .emu = emulator, .server = server };
 }
 
 pub fn deinit(self: *Self, allocator: Allocator) void {
     self.reset(allocator);
-
-    self.client.close();
-    self._socket.close();
-    network.deinit();
+    self.server.deinit();
 
     self.* = undefined;
 }
@@ -98,13 +86,17 @@ const Action = union(enum) {
 pub fn run(self: *Self, allocator: Allocator, quit: *Atomic(bool)) !void {
     var buf: [Packet.max_len]u8 = undefined;
 
+    var client = try self.server.accept();
+    log.info("client connected from {}", .{client.address});
+
     while (true) {
-        const len = try self.client.receive(&buf);
+        const len = try client.stream.readAll(&buf);
         if (len == 0) break;
 
         if (quit.load(.Monotonic)) break;
         const action = try self.parse(allocator, buf[0..len]);
-        try self.send(allocator, action);
+
+        try self.send(allocator, client, action);
     }
 
     // Just in case its the gdbstub that exited first,
@@ -113,7 +105,7 @@ pub fn run(self: *Self, allocator: Allocator, quit: *Atomic(bool)) !void {
 }
 
 fn parse(self: *Self, allocator: Allocator, input: []const u8) !Action {
-    // log.debug("-> {s}", .{input});
+    log.debug("-> {s}", .{input});
 
     return switch (input[0]) {
         '+' => blk: {
@@ -146,11 +138,11 @@ fn handlePacket(self: *Self, allocator: Allocator, input: []const u8) !Action {
     return .{ .send = response };
 }
 
-fn send(self: *Self, allocator: Allocator, action: Action) !void {
+fn send(self: *Self, allocator: Allocator, client: Server.Connection, action: Action) !void {
     switch (action) {
         .send => |pkt| {
-            _ = try self.client.send(pkt);
-            // log.debug("<- {s}", .{pkt});
+            _ = try client.stream.writeAll(pkt);
+            log.debug("<- {s}", .{pkt});
 
             self.reset(allocator);
             self.pkt_cache = pkt;
@@ -159,19 +151,19 @@ fn send(self: *Self, allocator: Allocator, action: Action) !void {
             log.warn("received nack, resending: \"{?s}\"", .{self.pkt_cache});
 
             if (self.pkt_cache) |pkt| {
-                _ = try self.client.send(pkt);
-                // log.debug("<- {s}", .{pkt});
+                _ = try client.stream.writeAll(pkt);
+                log.debug("<- {s}", .{pkt});
             }
         },
         .ack => {
-            _ = try self.client.send("+");
-            // log.debug("<- +", .{});
+            _ = try client.stream.writeAll("+");
+            log.debug("<- +", .{});
 
             self.reset(allocator);
         },
         .nack => {
-            _ = try self.client.send("-");
-            // log.debug("<- -", .{});
+            _ = try client.stream.writeAll("-");
+            log.debug("<- -", .{});
 
             self.reset(allocator);
         },

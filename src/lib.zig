@@ -142,3 +142,7 @@ pub const Emulator = struct {
         }
     }
 };
+
+test {
+    _ = @import("test.zig");
+}

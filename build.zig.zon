@@ -1,10 +1,5 @@
 .{
     .name = "zba-gdbstub",
     .version = "0.1.0",
-    .dependencies = .{
-        .@"zig-network" = .{
-            .url = "https://github.com/MasterQ32/zig-network/archive/07ef40cacd7b00bc0f26e254d97d4d4c9071195a.tar.gz",
-            .hash = "12204d3d4c1184d379a78399e5ddd8a46fe19ca6c991d5c9b909c1980d14acb1dede",
-        },
-    },
+    .dependencies = .{},
 }
