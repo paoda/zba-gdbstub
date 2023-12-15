@@ -1,16 +1,40 @@
 const std = @import("std");
 
+// Although this function looks imperative, note that its job is to
+// declaratively construct a build graph that will be executed by an external
+// runner.
 pub fn build(b: *std.Build) void {
+    // Standard target options allows the person running `zig build` to choose
+    // what target to build for. Here we do not override the defaults, which
+    // means any target is allowed, and the default is native. Other options
+    // for restricting supported target set are available.
     const target = b.standardTargetOptions(.{});
-    const net_dep = b.dependency("zig-network", .{}); // https://github.com/MasterQ32/zig-network
+
+    // Standard optimization options allow the person running `zig build` to select
+    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
+    // set a preferred release mode, allowing the user to decide how to optimize.
+    const optimize = b.standardOptimizeOption(.{});
+
+    const zig_network = b.dependency("zig-network", .{}); // https://github.com/MasterQ32/zig-network
 
     _ = b.addModule("gdbstub", .{
         .source_file = .{ .path = "src/lib.zig" },
-        .dependencies = &.{.{ .name = "network", .module = net_dep.module("network") }},
+        .dependencies = &.{.{ .name = "network", .module = zig_network.module("network") }},
     });
 
-    const lib_test = b.addTest(.{ .root_source_file = .{ .path = "src/lib.zig" }, .target = target });
+    // Creates a step for unit testing. This only builds the test executable
+    // but does not run it.
+    const lib_tests = b.addTest(.{
+        .root_source_file = .{ .path = "src/lib.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
 
-    const test_step = b.step("test", "Run Library Tests");
-    test_step.dependOn(&lib_test.step);
+    const run_lib_tests = b.addRunArtifact(lib_tests);
+
+    // This creates a build step. It will be visible in the `zig build --help` menu,
+    // and can be selected like this: `zig build test`
+    // This will evaluate the `test` step rather than the default, which is "install".
+    const test_step = b.step("test", "Run library tests");
+    test_step.dependOn(&run_lib_tests.step);
 }
