@@ -36,3 +36,19 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&run_lib_tests.step);
 }
+
+pub fn module(b: *std.Build) *std.Build.Module {
+    return b.createModule(.{
+        .source_file = .{ .path = path("/src/lib.zig") },
+        .dependencies = &.{},
+    });
+}
+
+// https://github.com/MasterQ32/SDL.zig/blob/4d565b54227b862c1540719e0e21a36d649e87d5/build.zig#L114-L120
+fn path(comptime suffix: []const u8) []const u8 {
+    if (suffix[0] != '/') @compileError("relToPath requires an absolute path!");
+    return comptime blk: {
+        const root_dir = std.fs.path.dirname(@src().file) orelse ".";
+        break :blk root_dir ++ suffix;
+    };
+}
