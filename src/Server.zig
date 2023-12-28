@@ -11,64 +11,75 @@ const Self = @This();
 const log = std.log.scoped(.Server);
 const port: u16 = 2424;
 
-pub const target: []const u8 =
-    \\<target version="1.0">
-    \\    <architecture>armv4t</architecture>
-    \\    <feature name="org.gnu.gdb.arm.core">
-    \\        <reg name="r0" bitsize="32" type="uint32"/>
-    \\        <reg name="r1" bitsize="32" type="uint32"/>
-    \\        <reg name="r2" bitsize="32" type="uint32"/>
-    \\        <reg name="r3" bitsize="32" type="uint32"/>
-    \\        <reg name="r4" bitsize="32" type="uint32"/>
-    \\        <reg name="r5" bitsize="32" type="uint32"/>
-    \\        <reg name="r6" bitsize="32" type="uint32"/>
-    \\        <reg name="r7" bitsize="32" type="uint32"/>
-    \\        <reg name="r8" bitsize="32" type="uint32"/>
-    \\        <reg name="r9" bitsize="32" type="uint32"/>
-    \\        <reg name="r10" bitsize="32" type="uint32"/>
-    \\        <reg name="r11" bitsize="32" type="uint32"/>
-    \\        <reg name="r12" bitsize="32" type="uint32"/>
-    \\        <reg name="sp" bitsize="32" type="data_ptr"/>
-    \\        <reg name="lr" bitsize="32"/>
-    \\        <reg name="pc" bitsize="32" type="code_ptr"/>
-    \\
-    \\        <reg name="cpsr" bitsize="32" regnum="25"/>
-    \\    </feature>
-    \\</target>
-;
+// TODO: move to ZBA
+// pub const target: []const u8 =
+//     \\<target version="1.0">
+//     \\    <architecture>armv4t</architecture>
+//     \\    <feature name="org.gnu.gdb.arm.core">
+//     \\        <reg name="r0" bitsize="32" type="uint32"/>
+//     \\        <reg name="r1" bitsize="32" type="uint32"/>
+//     \\        <reg name="r2" bitsize="32" type="uint32"/>
+//     \\        <reg name="r3" bitsize="32" type="uint32"/>
+//     \\        <reg name="r4" bitsize="32" type="uint32"/>
+//     \\        <reg name="r5" bitsize="32" type="uint32"/>
+//     \\        <reg name="r6" bitsize="32" type="uint32"/>
+//     \\        <reg name="r7" bitsize="32" type="uint32"/>
+//     \\        <reg name="r8" bitsize="32" type="uint32"/>
+//     \\        <reg name="r9" bitsize="32" type="uint32"/>
+//     \\        <reg name="r10" bitsize="32" type="uint32"/>
+//     \\        <reg name="r11" bitsize="32" type="uint32"/>
+//     \\        <reg name="r12" bitsize="32" type="uint32"/>
+//     \\        <reg name="sp" bitsize="32" type="data_ptr"/>
+//     \\        <reg name="lr" bitsize="32"/>
+//     \\        <reg name="pc" bitsize="32" type="code_ptr"/>
+//     \\
+//     \\        <reg name="cpsr" bitsize="32" regnum="25"/>
+//     \\    </feature>
+//     \\</target>
+// ;
 
-// Game Pak SRAM isn't included
-// TODO: Can i be more specific here?
-pub const memory_map: []const u8 =
-    \\ <memory-map version="1.0">
-    \\     <memory type="rom" start="0x00000000" length="0x00004000"/>
-    \\     <memory type="ram" start="0x02000000" length="0x00040000"/>
-    \\     <memory type="ram" start="0x03000000" length="0x00008000"/>
-    \\     <memory type="ram" start="0x04000000" length="0x00000400"/>
-    \\     <memory type="ram" start="0x05000000" length="0x00000400"/>
-    \\     <memory type="ram" start="0x06000000" length="0x00018000"/>
-    \\     <memory type="ram" start="0x07000000" length="0x00000400"/>
-    \\     <memory type="rom" start="0x08000000" length="0x02000000"/>
-    \\     <memory type="rom" start="0x0A000000" length="0x02000000"/>
-    \\     <memory type="rom" start="0x0C000000" length="0x02000000"/>
-    \\ </memory-map>
-;
+// // Game Pak SRAM isn't included
+// // TODO: Can i be more specific here?
+// pub const memory_map: []const u8 =
+//     \\ <memory-map version="1.0">
+//     \\     <memory type="rom" start="0x00000000" length="0x00004000"/>
+//     \\     <memory type="ram" start="0x02000000" length="0x00040000"/>
+//     \\     <memory type="ram" start="0x03000000" length="0x00008000"/>
+//     \\     <memory type="ram" start="0x04000000" length="0x00000400"/>
+//     \\     <memory type="ram" start="0x05000000" length="0x00000400"/>
+//     \\     <memory type="ram" start="0x06000000" length="0x00018000"/>
+//     \\     <memory type="ram" start="0x07000000" length="0x00000400"/>
+//     \\     <memory type="rom" start="0x08000000" length="0x02000000"/>
+//     \\     <memory type="rom" start="0x0A000000" length="0x02000000"/>
+//     \\     <memory type="rom" start="0x0C000000" length="0x02000000"/>
+//     \\ </memory-map>
+// ;
 
 // FIXME: Shouldn't this be a Packet Struct?
 pkt_cache: ?[]const u8 = null,
 
 socket: Server,
-state: State = .{},
+state: State,
 
 emu: Emulator,
 
-pub const State = struct { should_quit: bool = false };
+pub const State = struct {
+    should_quit: bool = false,
+    target_xml: []const u8,
+    memmap_xml: []const u8,
+};
 
-pub fn init(emulator: Emulator) !Self {
+const Xml = struct { target: []const u8, memory_map: []const u8 };
+
+pub fn init(emulator: Emulator, xml: Xml) !Self {
     var server = std.net.StreamServer.init(.{});
     try server.listen(std.net.Address.initIp4([_]u8{0} ** 4, port));
 
-    return .{ .emu = emulator, .socket = server };
+    return .{
+        .emu = emulator,
+        .socket = server,
+        .state = .{ .target_xml = xml.target, .memmap_xml = xml.memory_map },
+    };
 }
 
 pub fn deinit(self: *Self, allocator: Allocator) void {

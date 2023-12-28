@@ -5,9 +5,6 @@ const Emulator = @import("lib.zig").Emulator;
 const State = @import("State.zig");
 const Server = @import("Server.zig");
 
-const target = @import("Server.zig").target;
-const memory_map = @import("Server.zig").memory_map;
-
 const Self = @This();
 const log = std.log.scoped(.Packet);
 pub const max_len: usize = 0x1000;
@@ -236,11 +233,11 @@ pub fn parse(self: *Self, allocator: Allocator, state: *Server.State, emu: *Emul
                     // + 2 to account for the "m " in the response
                     // subtract offset so that the allocated buffer isn't
                     // larger than it needs to be TODO: Test this?
-                    const len = @min(length, (target.len + 1) - offset);
+                    const len = @min(length, (state.target_xml.len + 1) - offset);
                     const ret = try allocator.alloc(u8, len);
 
                     ret[0] = if (ret.len < length) 'l' else 'm';
-                    std.mem.copy(u8, ret[1..], target[offset..]);
+                    std.mem.copy(u8, ret[1..], state.target_xml[offset..]);
 
                     return .{ .alloc = ret };
                 } else {
@@ -263,11 +260,11 @@ pub fn parse(self: *Self, allocator: Allocator, state: *Server.State, emu: *Emul
                 const length = try std.fmt.parseInt(usize, length_str, 16);
 
                 // see above
-                const len = @min(length, (memory_map.len + 1) - offset);
+                const len = @min(length, (state.memmap_xml.len + 1) - offset);
                 const ret = try allocator.alloc(u8, len);
 
                 ret[0] = if (ret.len < length) 'l' else 'm';
-                std.mem.copy(u8, ret[1..], memory_map[offset..]);
+                std.mem.copy(u8, ret[1..], state.memmap_xml[offset..]);
 
                 return .{ .alloc = ret };
             }
