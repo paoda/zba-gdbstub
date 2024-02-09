@@ -237,7 +237,7 @@ pub fn parse(self: *Self, allocator: Allocator, state: *Server.State, emu: *Emul
                     const ret = try allocator.alloc(u8, len);
 
                     ret[0] = if (ret.len < length) 'l' else 'm';
-                    std.mem.copy(u8, ret[1..], state.target_xml[offset..]);
+                    @memcpy(ret[1..], state.target_xml[offset..]);
 
                     return .{ .alloc = ret };
                 } else {
@@ -264,7 +264,7 @@ pub fn parse(self: *Self, allocator: Allocator, state: *Server.State, emu: *Emul
                 const ret = try allocator.alloc(u8, len);
 
                 ret[0] = if (ret.len < length) 'l' else 'm';
-                std.mem.copy(u8, ret[1..], state.memmap_xml[offset..]);
+                @memcpy(ret[1..], state.memmap_xml[offset..]);
 
                 return .{ .alloc = ret };
             }

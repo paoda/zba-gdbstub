@@ -7,6 +7,49 @@ const Server = @import("Server.zig");
 const Allocator = std.mem.Allocator;
 
 const BarebonesEmulator = struct {
+
+    // I have this ARMv4T and GBA memory map xml lying around so we'll reuse it here
+    const target: []const u8 =
+        \\<target version="1.0">
+        \\    <architecture>armv4t</architecture>
+        \\    <feature name="org.gnu.gdb.arm.core">
+        \\        <reg name="r0" bitsize="32" type="uint32"/>
+        \\        <reg name="r1" bitsize="32" type="uint32"/>
+        \\        <reg name="r2" bitsize="32" type="uint32"/>
+        \\        <reg name="r3" bitsize="32" type="uint32"/>
+        \\        <reg name="r4" bitsize="32" type="uint32"/>
+        \\        <reg name="r5" bitsize="32" type="uint32"/>
+        \\        <reg name="r6" bitsize="32" type="uint32"/>
+        \\        <reg name="r7" bitsize="32" type="uint32"/>
+        \\        <reg name="r8" bitsize="32" type="uint32"/>
+        \\        <reg name="r9" bitsize="32" type="uint32"/>
+        \\        <reg name="r10" bitsize="32" type="uint32"/>
+        \\        <reg name="r11" bitsize="32" type="uint32"/>
+        \\        <reg name="r12" bitsize="32" type="uint32"/>
+        \\        <reg name="sp" bitsize="32" type="data_ptr"/>
+        \\        <reg name="lr" bitsize="32"/>
+        \\        <reg name="pc" bitsize="32" type="code_ptr"/>
+        \\
+        \\        <reg name="cpsr" bitsize="32" regnum="25"/>
+        \\    </feature>
+        \\</target>
+    ;
+
+    const memory_map: []const u8 =
+        \\ <memory-map version="1.0">
+        \\     <memory type="rom" start="0x00000000" length="0x00004000"/>
+        \\     <memory type="ram" start="0x02000000" length="0x00040000"/>
+        \\     <memory type="ram" start="0x03000000" length="0x00008000"/>
+        \\     <memory type="ram" start="0x04000000" length="0x00000400"/>
+        \\     <memory type="ram" start="0x05000000" length="0x00000400"/>
+        \\     <memory type="ram" start="0x06000000" length="0x00018000"/>
+        \\     <memory type="ram" start="0x07000000" length="0x00000400"/>
+        \\     <memory type="rom" start="0x08000000" length="0x02000000"/>
+        \\     <memory type="rom" start="0x0A000000" length="0x02000000"/>
+        \\     <memory type="rom" start="0x0C000000" length="0x02000000"/>
+        \\ </memory-map>
+    ;
+
     r: [16]u32 = [_]u32{0} ** 16,
 
     pub fn interface(self: *@This(), allocator: Allocator) Emulator {
@@ -57,13 +100,16 @@ test Server {
         }
     }.inner;
 
-    var server = try Server.init(iface);
+    var server = try Server.init(
+        iface,
+        .{ .target = BarebonesEmulator.target, .memory_map = BarebonesEmulator.memory_map },
+    );
     defer server.deinit(allocator);
 
     const t = try std.Thread.spawn(.{}, clientFn, .{server.socket.listen_address});
     defer t.join();
 
-    var should_quit = std.atomic.Atomic(bool).init(false);
+    var should_quit = std.atomic.Value(bool).init(false);
 
     try server.run(std.testing.allocator, &should_quit);
 }
