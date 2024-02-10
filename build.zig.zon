@@ -6,5 +6,4 @@
         "build.zig.zon",
         "src",
     },
-    .dependencies = .{},
 }
