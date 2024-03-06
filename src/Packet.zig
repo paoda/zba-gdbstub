@@ -215,6 +215,13 @@ pub fn parse(self: *Self, allocator: Allocator, state: *Server.State, emu: *Emul
             if (substr(self.contents[1..], "sThreadInfo")) return .{ .static = "l" };
             if (substr(self.contents[1..], "Attached")) return .{ .static = "1" }; // Tell GDB we're attached to a process
 
+            if (substr(self.contents[1..], "ThreadExtraInfo")) {
+                const extra_info = "FIXME: what is even expected here?";
+                const ret = try allocator.dupe(u8, &std.fmt.bytesToHex(extra_info, .lower));
+
+                return .{ .alloc = ret };
+            }
+
             if (substr(self.contents[1..], "Supported")) {
                 const format = "PacketSize={x:};swbreak+;hwbreak+;qXfer:features:read+;{s}";
                 const mem_map = if (state.memmap_xml == null) "" else "qXfer:memory-map:read+";
