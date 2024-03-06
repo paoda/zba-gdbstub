@@ -207,6 +207,7 @@ pub fn parse(self: *Self, allocator: Allocator, state: *Server.State, emu: *Emul
             log.warn("Unimplemented: {s}", .{self.contents});
             return .{ .static = "" };
         },
+        'T' => return .{ .static = "OK " }, // We assume single threaded here
         'q' => {
             if (self.contents[1] == 'C' and self.contents.len == 2) return .{ .static = "QC1" };
 
