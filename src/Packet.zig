@@ -195,10 +195,16 @@ pub fn parse(self: *Self, allocator: Allocator, state: *Server.State, emu: *Emul
         },
         'H' => return .{ .static = "" },
         'v' => {
-            if (!substr(self.contents[1..], "MustReplyEmpty")) {
-                log.warn("Unimplemented: {s}", .{self.contents});
+            if (substr(self.contents[1..], "MustReplyEmpty")) return .{ .static = "" };
+
+            if (substr(self.contents[1..], "Cont")) {
+                switch (self.contents[5]) {
+                    '?' => return .{ .static = "" }, // TODO: Implement vCont
+                    else => {},
+                }
             }
 
+            log.warn("Unimplemented: {s}", .{self.contents});
             return .{ .static = "" };
         },
         'q' => {
@@ -209,10 +215,11 @@ pub fn parse(self: *Self, allocator: Allocator, state: *Server.State, emu: *Emul
             if (substr(self.contents[1..], "Attached")) return .{ .static = "1" }; // Tell GDB we're attached to a process
 
             if (substr(self.contents[1..], "Supported")) {
-                const format = "PacketSize={x:};swbreak+;hwbreak+;qXfer:features:read+;qXfer:memory-map:read+";
-                // TODO: Anything else?
+                const format = "PacketSize={x:};swbreak+;hwbreak+;qXfer:features:read+;{s}";
+                const mem_map = if (state.memmap_xml == null) "" else "qXfer:memory-map:read+";
 
-                const ret = try std.fmt.allocPrint(allocator, format, .{Self.max_len});
+                // TODO: Anything else?
+                const ret = try std.fmt.allocPrint(allocator, format, .{ Self.max_len, mem_map });
                 return .{ .alloc = ret };
             }
 
@@ -249,6 +256,8 @@ pub fn parse(self: *Self, allocator: Allocator, state: *Server.State, emu: *Emul
             }
 
             if (substr(self.contents[1..], "Xfer:memory-map:read")) {
+                const mem_map = state.memmap_xml.?;
+
                 var tokens = std.mem.tokenize(u8, self.contents[1..], ":,");
                 _ = tokens.next(); // Xfer
                 _ = tokens.next(); // memory-map
@@ -260,11 +269,11 @@ pub fn parse(self: *Self, allocator: Allocator, state: *Server.State, emu: *Emul
                 const length = try std.fmt.parseInt(usize, length_str, 16);
 
                 // see above
-                const len = @min(length, (state.memmap_xml.len + 1) - offset);
+                const len = @min(length, (mem_map.len + 1) - offset);
                 const ret = try allocator.alloc(u8, len);
 
                 ret[0] = if (ret.len < length) 'l' else 'm';
-                @memcpy(ret[1..], state.memmap_xml[offset..]);
+                @memcpy(ret[1..], mem_map[offset..]);
 
                 return .{ .alloc = ret };
             }

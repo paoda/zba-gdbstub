@@ -21,10 +21,10 @@ emu: Emulator,
 pub const State = struct {
     should_quit: bool = false,
     target_xml: []const u8,
-    memmap_xml: []const u8,
+    memmap_xml: ?[]const u8,
 };
 
-const Xml = struct { target: []const u8, memory_map: []const u8 };
+const Xml = struct { target: []const u8, memory_map: ?[]const u8 };
 
 pub fn init(emulator: Emulator, xml: Xml) !Self {
     var server = std.net.StreamServer.init(.{});
