@@ -28,7 +28,7 @@ const Xml = struct { target: []const u8, memory_map: []const u8 };
 
 pub fn init(emulator: Emulator, xml: Xml) !Self {
     var server = std.net.StreamServer.init(.{});
-    try server.listen(std.net.Address.initIp4([_]u8{0} ** 4, port));
+    try server.listen(std.net.Address.initIp4(.{ 127, 0, 0, 1 }, port));
 
     return .{
         .emu = emulator,
@@ -52,27 +52,26 @@ const Action = union(enum) {
     nack,
 };
 
-pub fn run(self: *Self, allocator: Allocator, quit: *std.atomic.Value(bool)) !void {
+pub fn run(self: *Self, allocator: Allocator, should_quit: *std.atomic.Value(bool)) !void {
     var buf: [Packet.max_len]u8 = undefined;
 
     var client = try self.socket.accept();
     log.info("client connected from {}", .{client.address});
 
-    while (true) {
-        if (self.state.should_quit) break;
+    while (!should_quit.load(.Monotonic)) {
+        if (self.state.should_quit) {
+            // Just in case its the gdbstub that exited first,
+            // attempt to signal to the GUI that it should also exit
+            should_quit.store(true, .Monotonic);
+            break;
+        }
 
         const len = try client.stream.read(&buf);
         if (len == 0) break;
 
-        if (quit.load(.Monotonic)) break;
         const action = try self.parse(allocator, buf[0..len]);
-
         try self.send(allocator, client, action);
     }
-
-    // Just in case its the gdbstub that exited first,
-    // attempt to signal to the GUI that it should also exit
-    quit.store(true, .Monotonic);
 }
 
 fn parse(self: *Self, allocator: Allocator, input: []const u8) !Action {
