@@ -3,8 +3,7 @@ const Packet = @import("Packet.zig");
 const Emulator = @import("lib.zig").Emulator;
 
 const Allocator = std.mem.Allocator;
-const Server = std.net.StreamServer;
-const Connection = Server.Connection;
+const Server = std.net.Server;
 
 const Self = @This();
 const log = std.log.scoped(.Server);
@@ -27,12 +26,11 @@ pub const State = struct {
 const Xml = struct { target: []const u8, memory_map: ?[]const u8 };
 
 pub fn init(emulator: Emulator, xml: Xml) !Self {
-    var server = std.net.StreamServer.init(.{});
-    try server.listen(std.net.Address.initIp4(.{ 127, 0, 0, 1 }, port));
+    const localhost = std.net.Address.initIp4(.{ 127, 0, 0, 1 }, port);
 
     return .{
         .emu = emulator,
-        .socket = server,
+        .socket = try localhost.listen(.{}),
         .state = .{ .target_xml = xml.target, .memmap_xml = xml.memory_map },
     };
 }
@@ -58,11 +56,11 @@ pub fn run(self: *Self, allocator: Allocator, should_quit: *std.atomic.Value(boo
     var client = try self.socket.accept();
     log.info("client connected from {}", .{client.address});
 
-    while (!should_quit.load(.Monotonic)) {
+    while (!should_quit.load(.monotonic)) {
         if (self.state.should_quit) {
             // Just in case its the gdbstub that exited first,
             // attempt to signal to the GUI that it should also exit
-            should_quit.store(true, .Monotonic);
+            should_quit.store(true, .monotonic);
             break;
         }
 
