@@ -54,7 +54,7 @@ pub fn run(self: *Self, allocator: Allocator, should_quit: *std.atomic.Value(boo
     var buf: [Packet.max_len]u8 = undefined;
 
     var client = try self.socket.accept();
-    log.info("client connected from {}", .{client.address});
+    log.info("client connected from {f}", .{client.address});
 
     while (!should_quit.load(.monotonic)) {
         if (self.state.should_quit) {

@@ -12,7 +12,7 @@ pub const max_len: usize = 0x1000;
 contents: []const u8,
 
 pub fn from(allocator: Allocator, str: []const u8) !Self {
-    var tokens = std.mem.tokenize(u8, str, "$#");
+    var tokens = std.mem.tokenizeAny(u8, str, "$#");
     const contents = tokens.next() orelse return error.InvalidPacket;
 
     const chksum_str = tokens.next() orelse return error.MissingCheckSum;
@@ -63,7 +63,9 @@ pub fn parse(self: *Self, allocator: Allocator, state: *Server.State, emu: *Emul
 
                     // writes the formatted integer to the buffer, returns a slice to the buffer but we ignore that
                     // GDB also expects the bytes to be in the opposite order for whatever reason
-                    _ = std.fmt.bufPrintIntToSlice(ret[i * 8 ..][0..8], @byteSwap(reg), 16, .lower, .{ .fill = '0', .width = 8 });
+
+                    _ = try std.fmt.bufPrint(ret[i * 8 ..][0..8], "{x:0>8}", .{@byteSwap(reg)});
+                    // _ = std.fmt.bufPrintIntToSlice(ret[i * 8 ..][0..8], @byteSwap(reg), 16, .lower, .{ .fill = '0', .width = 8 });
                 }
             }
 
@@ -71,7 +73,7 @@ pub fn parse(self: *Self, allocator: Allocator, state: *Server.State, emu: *Emul
         },
         'G' => @panic("TODO: Register Write"),
         'm' => {
-            var tokens = std.mem.tokenize(u8, self.contents[1..], ",");
+            var tokens = std.mem.tokenizeAny(u8, self.contents[1..], ",");
             const addr_str = tokens.next() orelse return error.InvalidPacket;
             const length_str = tokens.next() orelse return error.InvalidPacket;
 
@@ -84,14 +86,16 @@ pub fn parse(self: *Self, allocator: Allocator, state: *Server.State, emu: *Emul
                 var i: u32 = 0;
                 while (i < len) : (i += 1) {
                     // writes the formatted integer to the buffer, returns a slice to the buffer but we ignore that
-                    _ = std.fmt.bufPrintIntToSlice(ret[i * 2 ..][0..2], emu.read(addr + i), 16, .lower, .{ .fill = '0', .width = 2 });
+
+                    _ = try std.fmt.bufPrint(ret[i * 2 ..][0..2], "{x:0>2}", .{emu.read(addr + i)});
+                    // _ = std.fmt.bufPrintIntToSlice(ret[i * 2 ..][0..2], emu.read(addr + i), 16, .lower, .{ .fill = '0', .width = 2 });
                 }
             }
 
             return .{ .alloc = ret };
         },
         'M' => {
-            var tokens = std.mem.tokenize(u8, self.contents[1..], ",:");
+            var tokens = std.mem.tokenizeAny(u8, self.contents[1..], ",:");
 
             const addr_str = tokens.next() orelse return error.InvalidPacket;
             const length_str = tokens.next() orelse return error.InvalidPacket;
@@ -122,7 +126,7 @@ pub fn parse(self: *Self, allocator: Allocator, state: *Server.State, emu: *Emul
             }
         },
         's' => {
-            // var tokens = std.mem.tokenize(u8, self.contents[1..], " ");
+            // var tokens = std.mem.tokenizeAny(u8, self.contents[1..], " ");
             // const addr = if (tokens.next()) |s| try std.fmt.parseInt(u32, s, 16) else null;
 
             switch (emu.step()) {
@@ -136,7 +140,7 @@ pub fn parse(self: *Self, allocator: Allocator, state: *Server.State, emu: *Emul
 
         // Breakpoints
         'z' => {
-            var tokens = std.mem.tokenize(u8, self.contents[2..], ",");
+            var tokens = std.mem.tokenizeAny(u8, self.contents[2..], ",");
 
             const addr_str = tokens.next() orelse return error.InvalidPacket;
             const addr = try std.fmt.parseInt(u32, addr_str, 16);
@@ -157,7 +161,7 @@ pub fn parse(self: *Self, allocator: Allocator, state: *Server.State, emu: *Emul
             }
         },
         'Z' => {
-            var tokens = std.mem.tokenize(u8, self.contents[2..], ",");
+            var tokens = std.mem.tokenizeAny(u8, self.contents[2..], ",");
             const addr_str = tokens.next() orelse return error.InvalidPacket;
             const kind_str = tokens.next() orelse return error.InvalidPacket;
 
@@ -166,11 +170,11 @@ pub fn parse(self: *Self, allocator: Allocator, state: *Server.State, emu: *Emul
 
             switch (self.contents[1]) {
                 '0' => {
-                    try emu.addBkpt(.Software, addr, kind);
+                    try emu.addBkpt(.Software, allocator, addr, kind);
                     return .{ .static = "OK" };
                 },
                 '1' => {
-                    emu.addBkpt(.Hardware, addr, kind) catch |e| {
+                    emu.addBkpt(.Hardware, allocator, addr, kind) catch |e| {
                         switch (e) {
                             error.OutOfSpace => return .{ .static = "E22" }, // FIXME: which errno?
                             else => return e,
@@ -232,7 +236,7 @@ pub fn parse(self: *Self, allocator: Allocator, state: *Server.State, emu: *Emul
             }
 
             if (substr(self.contents[1..], "Xfer:features:read")) {
-                var tokens = std.mem.tokenize(u8, self.contents[1..], ":,");
+                var tokens = std.mem.tokenizeAny(u8, self.contents[1..], ":,");
                 _ = tokens.next(); // Xfer
                 _ = tokens.next(); // features
                 _ = tokens.next(); // read
@@ -266,7 +270,7 @@ pub fn parse(self: *Self, allocator: Allocator, state: *Server.State, emu: *Emul
             if (substr(self.contents[1..], "Xfer:memory-map:read")) {
                 const mem_map = state.memmap_xml.?;
 
-                var tokens = std.mem.tokenize(u8, self.contents[1..], ":,");
+                var tokens = std.mem.tokenizeAny(u8, self.contents[1..], ":,");
                 _ = tokens.next(); // Xfer
                 _ = tokens.next(); // memory-map
                 _ = tokens.next(); // read

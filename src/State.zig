@@ -1,31 +1,21 @@
 const std = @import("std");
-
 const Allocator = std.mem.Allocator;
-const ArrayList = std.ArrayList;
 
 hw_bkpt: HwBkpt = .{},
-sw_bkpt: SwBkpt,
+sw_bkpt: SwBkpt = .{},
 
-pub fn init(allocator: Allocator) @This() {
-    return .{ .sw_bkpt = SwBkpt.init(allocator) };
-}
-
-pub fn deinit(self: *@This()) void {
-    self.sw_bkpt.deinit();
+pub fn deinit(self: *@This(), allocator: Allocator) void {
+    self.sw_bkpt.deinit(allocator);
     self.* = undefined;
 }
 
 const SwBkpt = struct {
     const log = std.log.scoped(.SwBkpt);
 
-    list: std.ArrayList(Bkpt),
+    list: std.ArrayList(Bkpt) = .empty,
 
-    pub fn init(allocator: Allocator) @This() {
-        return .{ .list = ArrayList(Bkpt).init(allocator) };
-    }
-
-    pub fn deinit(self: *@This()) void {
-        self.list.deinit();
+    pub fn deinit(self: *@This(), allocator: Allocator) void {
+        self.list.deinit(allocator);
         self.* = undefined;
     }
 
@@ -37,12 +27,12 @@ const SwBkpt = struct {
         return false;
     }
 
-    pub fn add(self: *@This(), addr: u32, kind: u32) !void {
+    pub fn add(self: *@This(), allocator: Allocator, addr: u32, kind: u32) !void {
         for (self.list.items) |bkpt| {
             if (bkpt.addr == addr) return; // indempotent
         }
 
-        try self.list.append(.{ .addr = addr, .kind = try Bkpt.Kind.from(u32, kind) });
+        try self.list.append(allocator, .{ .addr = addr, .kind = try Bkpt.Kind.from(u32, kind) });
         log.warn("Added Breakpoint at 0x{X:0>8}", .{addr});
     }
 
@@ -110,7 +100,7 @@ const Bkpt = struct {
         Thumb = 4,
 
         pub fn from(comptime T: type, num: T) !@This() {
-            comptime std.debug.assert(@typeInfo(T) == .Int);
+            comptime std.debug.assert(@typeInfo(T) == .int);
 
             return switch (num) {
                 2 => .Arm,

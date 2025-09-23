@@ -16,7 +16,7 @@ pub const Emulator = struct {
         SingleStep: void,
     };
 
-    state: State,
+    state: State = .{},
 
     ptr: *anyopaque,
 
@@ -28,42 +28,42 @@ pub const Emulator = struct {
 
     stepFn: *const fn (*anyopaque) void,
 
-    pub fn init(allocator: Allocator, ptr: anytype) Self {
+    pub fn init(ptr: anytype) Self {
         const Ptr = @TypeOf(ptr);
         const ptr_info = @typeInfo(Ptr);
 
-        if (ptr_info != .Pointer) @compileError("ptr must be a pointer");
-        if (ptr_info.Pointer.size != .One) @compileError("ptr must be a single-item pointer");
+        if (ptr_info != .pointer) @compileError("ptr must be a pointer");
+        if (ptr_info.pointer.size != .one) @compileError("ptr must be a single-item pointer");
 
         const gen = struct {
             pub fn readImpl(pointer: *anyopaque, addr: u32) u8 {
                 const self: Ptr = @ptrCast(@alignCast(pointer));
 
-                return @call(.always_inline, ptr_info.Pointer.child.read, .{ self, addr });
+                return @call(.always_inline, ptr_info.pointer.child.read, .{ self, addr });
             }
 
             pub fn writeImpl(pointer: *anyopaque, addr: u32, value: u8) void {
                 const self: Ptr = @ptrCast(@alignCast(pointer));
 
-                return @call(.always_inline, ptr_info.Pointer.child.write, .{ self, addr, value });
+                return @call(.always_inline, ptr_info.pointer.child.write, .{ self, addr, value });
             }
 
             pub fn registersImpl(pointer: *anyopaque) *[16]u32 {
                 const self: Ptr = @ptrCast(@alignCast(pointer));
 
-                return @call(.always_inline, ptr_info.Pointer.child.registers, .{self});
+                return @call(.always_inline, ptr_info.pointer.child.registers, .{self});
             }
 
             pub fn cpsrImpl(pointer: *anyopaque) u32 {
                 const self: Ptr = @ptrCast(@alignCast(pointer));
 
-                return @call(.always_inline, ptr_info.Pointer.child.cpsr, .{self});
+                return @call(.always_inline, ptr_info.pointer.child.cpsr, .{self});
             }
 
             pub fn stepImpl(pointer: *anyopaque) void {
                 const self: Ptr = @ptrCast(@alignCast(pointer));
 
-                return @call(.always_inline, ptr_info.Pointer.child.step, .{self});
+                return @call(.always_inline, ptr_info.pointer.child.step, .{self});
             }
         };
 
@@ -74,13 +74,11 @@ pub const Emulator = struct {
             .registersFn = gen.registersImpl,
             .cpsrFn = gen.cpsrImpl,
             .stepFn = gen.stepImpl,
-
-            .state = State.init(allocator),
         };
     }
 
-    pub fn deinit(self: *Self) void {
-        self.state.deinit();
+    pub fn deinit(self: *Self, allocator: Allocator) void {
+        self.state.deinit(allocator);
         self.* = undefined;
     }
 
@@ -128,10 +126,10 @@ pub const Emulator = struct {
     const BkptType = enum { Hardware, Software };
 
     // TODO: Consider properly implementing Software interrupts?
-    pub fn addBkpt(self: *Self, comptime @"type": BkptType, addr: u32, kind: u32) !void {
+    pub fn addBkpt(self: *Self, comptime @"type": BkptType, allocator: Allocator, addr: u32, kind: u32) !void {
         switch (@"type") {
             .Hardware => try self.state.hw_bkpt.add(addr, kind),
-            .Software => try self.state.sw_bkpt.add(addr, kind),
+            .Software => try self.state.sw_bkpt.add(allocator, addr, kind),
         }
     }
 

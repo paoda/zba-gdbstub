@@ -52,8 +52,8 @@ const BarebonesEmulator = struct {
 
     r: [16]u32 = [_]u32{0} ** 16,
 
-    pub fn interface(self: *@This(), allocator: Allocator) Emulator {
-        return Emulator.init(allocator, self);
+    pub fn interface(self: *@This()) Emulator {
+        return Emulator.init(self);
     }
 
     pub fn read(_: *const @This(), _: u32) u8 {
@@ -88,15 +88,19 @@ test Server {
     const allocator = std.testing.allocator;
 
     var impl = BarebonesEmulator{};
-    var iface = impl.interface(allocator);
-    defer iface.deinit();
+    var iface = impl.interface();
+    defer iface.deinit(allocator);
 
     const clientFn = struct {
         fn inner(address: std.net.Address) !void {
             const socket = try std.net.tcpConnectToAddress(address);
             defer socket.close();
 
-            _ = try socket.writer().writeAll("+");
+            var buf: [1024]u8 = undefined;
+
+            var writer = socket.writer(&buf).interface;
+
+            _ = try writer.writeAll("+");
         }
     }.inner;
 
@@ -142,7 +146,7 @@ test Emulator {
     };
 
     var impl = ExampleImpl{};
-    var emu = Emulator.init(std.testing.allocator, &impl);
+    var emu = Emulator.init(&impl);
 
     _ = emu.read(0x0000_0000);
     emu.write(0x0000_0000, 0x00);
